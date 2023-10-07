@@ -8,3 +8,19 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
+
+
+int main(int argc, char const *argv[])
+{
+    if (argc != 3)
+    {
+        printf("All arguments not entered\n");
+        exit(1);
+    }
+    
+    int NCPU = atoi(argv[1]), TSLICE = atoi(argv[2]);
+    system("./simple-shell");
+
+    return 0;
+}
+
