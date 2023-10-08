@@ -23,7 +23,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0;
+int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU , TSLICE;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -97,19 +97,55 @@ void executeCommand(char** argv, int queue[]) {  // check
 
     else { 
         queue[queue_head++] = pid;
-        // int ret;
-        // int pid = wait(&ret);
+        int ret;
+        int pid = wait(&ret);
 
-        // if (WIFEXITED(ret)) {
-        //     if (WEXITSTATUS(ret) == -1)
-        //     {
-        //         printf("Exit = -1\n");
-        //     }
-        // } else {
-        //     printf("\nAbnormal termination with pid :%d\n" , pid);
-        // }
+        if (WIFEXITED(ret)) {
+            if (WEXITSTATUS(ret) == -1)
+            {
+                printf("Exit = -1\n");
+            }
+        } else {
+            printf("\nAbnormal termination with pid :%d\n" , pid);
+        }
         
         return;
+    }
+}
+
+void schedule(int signum , int queue[]) {
+    int queue_size = queue_tail - queue_head + 1;
+    // Signal the first NCPU processes in the ready queue to start execution
+    for (int i = 0; i < NCPU && i < queue_size; i++) {
+        int pid = queue[i];
+        kill(pid, SIGCONT);
+    }
+
+    // Pause the running processes after TSLICE milliseconds
+    usleep(TSLICE * 1000);
+
+    // Check for completed processes and remove them from the queue
+    int i = queue_head;
+    while (i < queue_size) {
+        int pid = queue[i];
+        int status;
+        int result = waitpid(pid, &status, WNOHANG);
+        if (result == -1) {
+            // Error handling
+        } else if (result == 0) {
+            // The process is still running
+            i++;
+        } else {
+            // The process has terminated, remove it from the queue
+            queue_head++;
+        }
+    }
+
+    // Requeue the paused processes to the rear of the ready queue
+    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
+        int pid = queue[i];
+        kill(pid, SIGSTOP);
+        queue[queue_size++] = pid;
     }
 }
 
@@ -166,7 +202,9 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
     
-    int NCPU = atoi(argv[1]), TSLICE = atoi(argv[2]) , queue[NCPU];
+    NCPU = atoi(argv[1]);
+    TSLICE = atoi(argv[2]);
+    int queue[NCPU];
     setup_signal_handler(); 
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
