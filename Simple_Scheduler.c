@@ -212,7 +212,6 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
 
-
     char c[100]; // to print the current directory
     printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
 
