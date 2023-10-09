@@ -225,7 +225,7 @@ int main(int argc, char const *argv[]) {
             start_time = get_time();
         
             char **command_1 = break_spaces(str);
-            executeCommand(command_1);
+            executeCommand(command_1 , queue);
                 
 
             count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
