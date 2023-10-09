@@ -145,7 +145,7 @@ void schedule(int signum , int queue[]) {
     for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
         int pid = queue[i];
         kill(pid, SIGSTOP);
-        queue[queue_size++] = pid;
+        queue[queue_head++] = pid;
     }
 }
 
