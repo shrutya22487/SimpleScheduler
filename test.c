@@ -14,8 +14,9 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU , TSLICE;
-int queue[4];
+int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 1000;
+int queue[100];
+
 bool newline_checker( char* line  , int len){
     bool flag1  = false , flag2 = false;
     if ( line[len - 1] == '\n' )
@@ -30,68 +31,63 @@ bool newline_checker( char* line  , int len){
 }
 
 
-void executeCommand(char** argv) {  // check
-    int pid = fork();
+void queue_command(char** argv) {
+    pid_t pid = fork();
 
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
-    }
-
-    else if (pid == 0) { //child process
+    } else if (pid == 0) {
         wait(NULL);
-        execvp(argv[0], argv); 
+        execvp(argv[0], argv);
         printf("Command failed.\n");
         exit(1);
-    }
-
-    else { 
-        int ret;
-        //int pid = wait(&ret);
+    } else { 
         queue[queue_tail++] = pid;
         kill(pid, SIGSTOP);
-        printf("Child Paused\n");
-        
-        
+        printf("Child Paused___queue_tail = %d\n", queue_tail);
         return;
     }
 }
 
-void schedule(int signum , int queue[]) {
-    int queue_size = queue_tail - queue_head + 1;
-    // Signal the first NCPU processes in the ready queue to start execution
-    for (int i = 0; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGCONT);
-    }
-
-    // Pause the running processes after TSLICE milliseconds
-    usleep(TSLICE * 1000);
-
-    // Check for completed processes and remove them from the queue
-    int i = queue_head;
-    while (i < queue_size) {
-        int pid = queue[i];
-        int status;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == -1) {
-            // Error handling
-        } else if (result == 0) {
-            // The process is still running
-            i++;
-        } else {
-            // The process has terminated, remove it from the queue
-            queue_head++;
-        }
-    }
-
-    // Requeue the paused processes to the rear of the ready queue
-    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGSTOP);
-        queue[queue_head++] = pid;
-    }
+int queue_empty (){
+    return queue_head == queue_tail;
 }
+void schedule() {
+
+    int cpu_counter = 0;
+    int old_head = queue_head;
+    printf("Starting commands\n");
+    while ( cpu_counter != NCPU && !queue_empty)
+    {
+        int pid = queue[queue_head++];
+        kill(pid, SIGCONT);
+        cpu_counter++;
+    }
+    printf("Starting commands\n");
+
+    usleep(TSLICE * 1000);
+    int status;
+    int i = 0;
+
+    while ( i <= cpu_counter )
+    {
+        int pid = queue[old_head++];
+        kill(pid, SIGSTOP);
+        waitpid(pid, &status, WNOHANG);
+
+        if ( !WIFEXITED(status) )
+        {
+            queue[queue_tail++] = pid;
+            
+        }
+        i++;
+    }
+    
+}
+
+
+
 
 char** break_spaces(char *str) {  
     char **command;
@@ -122,7 +118,7 @@ char** break_spaces(char *str) {
 }
 
 
-char* Input(){   // to take input from user , returns the string entered
+char* Input(){  
     char *input_str = (char*)malloc(100);
     if (input_str == NULL) {
         printf("Memory allocation failed\n");
@@ -147,17 +143,18 @@ int main(int argc, char const *argv[])
 
 
     char* str = Input();
-    executeCommand(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
 
+    printf("Executing commands\n");
 
-    usleep(6000);
-    printf("Child Resumed\n");
-
-    for (int i = 0; i < queue_tail; i++)
+    while (!queue_empty())
     {
-        kill(queue[i], SIGCONT);
-
+        schedule();
     }
+    
     return 0;
 }
 

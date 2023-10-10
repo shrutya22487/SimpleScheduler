@@ -103,39 +103,35 @@ void executeCommand(char** argv) {  // check
 }
 
 void schedule(int signum , int queue[]) {
-    int queue_size = queue_tail - queue_head + 1;
-    // Signal the first NCPU processes in the ready queue to start execution
-    for (int i = 0; i < NCPU && i < queue_size; i++) {
+    int queue_size = queue_tail - queue_head ;
+    for (int i = queue_head; i < NCPU && i < queue_size; i++) {
         int pid = queue[i];
         kill(pid, SIGCONT);
     }
 
-    // Pause the running processes after TSLICE milliseconds
     sleep(TSLICE/1000);
-
-    // Check for completed processes and remove them from the queue
-    int i = queue_head;
-    while (i < queue_size) {
-        int pid = queue[i];
-        int status;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == -1) {
-            // Error handling
-        } else if (result == 0) {
-            // The process is still running
-            i++;
-        } else {
-            // The process has terminated, remove it from the queue
-            queue_head++;
-        }
-    }
-
-    // Requeue the paused processes to the rear of the ready queue
-    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
+    
+    int new_head = -1;
+    int status;
+    for (int i = queue_head; i < NCPU && i < queue_size; i++) {
+        new_head = i;
         int pid = queue[i];
         kill(pid, SIGSTOP);
+        waitpid(pid, &status, WNOHANG);
+
+        if ( !WIFEXITED(status) )
+        {
+            queue[queue_tail++] = pid;
+        }
+        
         queue[queue_head++] = pid;
     }
+
+    if (new_head != -1)
+    {
+        queue_head = new_head;
+    }
+    
 }
 
 
