@@ -15,7 +15,7 @@ int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
 int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 1000;
-int queue[100];
+pid_t queue[100];
 
 bool newline_checker( char* line  , int len){
     bool flag1  = false , flag2 = false;
@@ -53,39 +53,36 @@ void queue_command(char** argv) {
 int queue_empty (){
     return queue_head == queue_tail;
 }
-void schedule() {
 
+void schedule() {
     int cpu_counter = 0;
     int old_head = queue_head;
     printf("Starting commands\n");
-    while ( cpu_counter != NCPU && !queue_empty)
-    {
-        int pid = queue[queue_head++];
+    pid_t pid;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        pid = queue[queue_head++];
         kill(pid, SIGCONT);
         cpu_counter++;
     }
-    printf("Starting commands\n");
+
+    printf("Running commands\n");
 
     usleep(TSLICE * 1000);
     int status;
     int i = 0;
 
-    while ( i <= cpu_counter )
-    {
-        int pid = queue[old_head++];
+    while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
+        pid = queue[old_head++];
         kill(pid, SIGSTOP);
-        waitpid(pid, &status, WNOHANG);
+        waitpid(pid, &status, 0);
 
-        if ( !WIFEXITED(status) )
-        {
+        if (!WIFEXITED(status)) {
             queue[queue_tail++] = pid;
-            
         }
         i++;
     }
-    
 }
-
 
 
 
@@ -143,6 +140,12 @@ int main(int argc, char const *argv[])
 
 
     char* str = Input();
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
+    queue_command(break_spaces(str));
     queue_command(break_spaces(str));
     queue_command(break_spaces(str));
     queue_command(break_spaces(str));
