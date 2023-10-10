@@ -148,10 +148,9 @@ int main(int argc, char const *argv[])
 
     char* str = Input();
     executeCommand(break_spaces(str));
-    executeCommand(break_spaces(str));
-    executeCommand(break_spaces(str));
 
-    sleep(6);
+
+    usleep(6000);
     printf("Child Resumed\n");
 
     for (int i = 0; i < queue_tail; i++)

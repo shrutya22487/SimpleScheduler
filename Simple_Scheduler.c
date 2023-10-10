@@ -111,7 +111,7 @@ void schedule(int signum , int queue[]) {
     }
 
     // Pause the running processes after TSLICE milliseconds
-    usleep(TSLICE * 1000);
+    sleep(TSLICE/1000);
 
     // Check for completed processes and remove them from the queue
     int i = queue_head;
