@@ -8,9 +8,9 @@ int fib(int n) {
 }
 
 
-int main()
+int main(int argc, char const *argv[])
 {
-  int val = fib( 40 );
-  printf("fib value  =  %d \n", val);
+  int val = fib(20);
+  printf("fib value  ==  %d \n", val);
   return 0;
 }

@@ -40,9 +40,6 @@ void executeCommand(char** argv) {  // check
 
     else if (pid == 0) { //child process
         wait(NULL);
-        // //signal(SIGSTOP , SIG_DFL);
-        // printf("giving stop signal\n");
-        // kill(pid, SIGSTOP);
         execvp(argv[0], argv); 
         printf("Command failed.\n");
         exit(1);
@@ -54,17 +51,7 @@ void executeCommand(char** argv) {  // check
         queue[queue_tail++] = pid;
         kill(pid, SIGSTOP);
         printf("Child Paused\n");
-        //printf("Child pid: %d , return status: %d ", pid , ret );
-
-
-        // if (WIFEXITED(ret)) {
-        //     if (WEXITSTATUS(ret) == -1)
-        //     {
-        //         printf("Exit = -1\n");
-        //     }
-        // } else {
-        //     printf("\nAbnormal termination with pid :%d\n" , pid);
-        // }
+        
         
         return;
     }
@@ -161,9 +148,17 @@ int main(int argc, char const *argv[])
 
     char* str = Input();
     executeCommand(break_spaces(str));
-    kill(queue[0], SIGCONT);
+    executeCommand(break_spaces(str));
+    executeCommand(break_spaces(str));
+
+    sleep(6);
     printf("Child Resumed\n");
 
+    for (int i = 0; i < queue_tail; i++)
+    {
+        kill(queue[i], SIGCONT);
+
+    }
     return 0;
 }
 

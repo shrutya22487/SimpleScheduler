@@ -23,7 +23,8 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU , TSLICE ,queue[100];
+int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU , TSLICE ;
+pid_t queue[100];
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -45,12 +46,15 @@ void display_history() {
         printf("End_Time: %ld\n", time_history[i][1]);
         printf("-------------------------------\n");
     }
+      
+
+        
 }
 
 void signal_handler(int signum) { // check
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
-        display_history();        
+        display_history();    
         exit(0);
     }
 }
@@ -80,6 +84,7 @@ bool newline_checker( char* line  , int len){
 
 void executeCommand(char** argv) {  // check
     int pid = fork();
+    child_pid = pid;
 
     if (pid < 0) {
         printf("Forking child failed.\n");
@@ -87,54 +92,27 @@ void executeCommand(char** argv) {  // check
     }
 
     else if (pid == 0) { //child process
-        wait(NULL);
+
         execvp(argv[0], argv); 
         printf("Command failed.\n");
         exit(1);
     }
 
     else { 
+        
         int ret;
-        queue[queue_tail++] = pid;
-        kill(pid, SIGSTOP);
-        printf("Child Paused___queue_tail = %d\n" , queue_tail);
-        return;
-    }
-}
+        int pid = wait(&ret);
 
-void schedule(int signum , int queue[]) {
-    int queue_size = queue_tail - queue_head + 1;
-    // Signal the first NCPU processes in the ready queue to start execution
-    for (int i = 0; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGCONT);
-    }
-
-    // Pause the running processes after TSLICE milliseconds
-    usleep(TSLICE * 1000);
-
-    // Check for completed processes and remove them from the queue
-    int i = queue_head;
-    while (i < queue_size) {
-        int pid = queue[i];
-        int status;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == -1) {
-            // Error handling
-        } else if (result == 0) {
-            // The process is still running
-            i++;
+        if (WIFEXITED(ret)) {
+            if (WEXITSTATUS(ret) == -1)
+            {
+                printf("Exit = -1\n");
+            }
         } else {
-            // The process has terminated, remove it from the queue
-            queue_head++;
+            printf("\nAbnormal termination with pid :%d\n" , pid);
         }
-    }
-
-    // Requeue the paused processes to the rear of the ready queue
-    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGSTOP);
-        queue[queue_head++] = pid;
+        
+        return;
     }
 }
 
@@ -167,7 +145,6 @@ char** break_spaces(char *str) {
     return command;
 }
 
-
 char* Input(){   // to take input from user , returns the string entered
     char *input_str = (char*)malloc(100);
     if (input_str == NULL) {
@@ -184,15 +161,28 @@ char* Input(){   // to take input from user , returns the string entered
     return input_str;
 }
 
-int main(int argc, char const *argv[]) {
-    if (argc != 3)
-    {
-        printf("All arguments not entered\n");
+void queue_command(char** argv) {
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        printf("Forking child failed.\n");
         exit(1);
+    } else if (pid == 0) {
+        wait(NULL);
+
+        execvp(argv[0], argv);
+        printf("Command failed.\n");
+        exit(1);
+    } else { // parent process
+        queue[queue_tail++] = pid;
+        kill(pid, SIGSTOP);
+        printf("Child Paused___queue_tail = %d\n", queue_tail);
+        return;
     }
-    
-    NCPU = atoi(argv[1]);
-    TSLICE = atoi(argv[2]);
+}
+
+
+int main(int argc, char const *argv[]) {
     setup_signal_handler(); 
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
@@ -210,16 +200,27 @@ int main(int argc, char const *argv[]) {
         if (flag_for_Input == true) {
             strcpy(str_for_history, str);
             start_time = get_time();
-        
             char **command_1 = break_spaces(str);
-            executeCommand(command_1 );
-                
+            if (strcmp("submit" , command_1[0]) == 0)
+            {   
+                int arrSize = sizeof(command_1) / sizeof(command_1[0]);
 
+                // Create a new array to store the updated contents
+                char** newArr;
+
+                // Copy elements from the original array to the new array, skipping the first element
+                for (int i = 1; i < arrSize; i++) {
+                    strcpy(newArr[i - 1], command_1[i]);
+                }
+                queue_command(newArr);
+            }
+            else
+            {
+                executeCommand(command_1);
+            }         
             count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
         }
     }
-
     free(str_for_history);
-
     return 0;
 }
