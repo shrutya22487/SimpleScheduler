@@ -204,11 +204,7 @@ int main(int argc, char const *argv[]) {
             if (strcmp("submit" , command_1[0]) == 0)
             {   
                 int arrSize = sizeof(command_1) / sizeof(command_1[0]);
-
-                // Create a new array to store the updated contents
                 char** newArr;
-
-                // Copy elements from the original array to the new array, skipping the first element
                 for (int i = 1; i < arrSize; i++) {
                     strcpy(newArr[i - 1], command_1[i]);
                 }
