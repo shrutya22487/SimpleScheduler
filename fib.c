@@ -8,9 +8,9 @@ int fib(int n) {
 }
 
 
-int main(int argc, char const *argv[])
+int main()
 {
-  int val = fib(atoi(argv[1]));
-  printf("fib value  ==  %d \n", val);
+  int val = fib( 40 );
+  printf("fib value  =  %d \n", val);
   return 0;
 }
