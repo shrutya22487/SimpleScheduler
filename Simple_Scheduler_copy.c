@@ -216,6 +216,8 @@ void schedule() {
     int old_head = queue_head;
     printf("Starting commands\n");
     pid_t pid;
+    //current time 
+
 
     while (cpu_counter != NCPU && !queue_empty()) {// to take in NCPU processes or till the queue is empty
         pid = queue[queue_head++];

@@ -8,6 +8,7 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
+#include "Simple_Scheduler.h"
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -314,12 +315,7 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
-int check_submit( char **command){
-    if (/* condition */)
-    {
-        /* code */
-    }
-    
+char** remove_submit( char **command){
 
 
 }
@@ -365,6 +361,10 @@ int main(int argc, char const *argv[]) {
                     executePipe(command_2);
                 } else {
                     char **command_1 = break_spaces(str);
+                    if ( !strcmp("submit" , command_1[0]) )
+                    {
+                        
+                    }
                     executeCommand(command_1);
                 }
             }
