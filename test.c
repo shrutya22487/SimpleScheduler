@@ -14,8 +14,9 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 1000;
-pid_t queue[100];
+int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 100;
+int queue[100];
+int cpu_counter = 0 , old_head = 0;
 
 bool newline_checker( char* line  , int len){
     bool flag1  = false , flag2 = false;
@@ -44,7 +45,11 @@ void queue_command(char** argv) {
         exit(1);
     } else { 
         queue[queue_tail++] = pid;
-        kill(pid, SIGSTOP);
+        kill(queue[0], SIGSTOP);
+        printf("Sleeping\n");
+
+       // sleep(2);
+        //kill(queue[0] , SIGCONT);
         printf("Child Paused___queue_tail = %d\n", queue_tail);
         return;
     }
@@ -52,40 +57,92 @@ void queue_command(char** argv) {
 
 int queue_empty (){
     return queue_head == queue_tail;
+}\
+
+
+
+// void timer_handler() {
+//     pid_t pid;
+//     int status;
+//     int i = 0;
+//     while (i < cpu_counter) {
+//         pid = queue[old_head++];
+//         kill(pid, SIGSTOP);
+//         waitpid(pid, &status, 0);
+
+//         if (!WIFEXITED(status)) {
+//             queue[queue_tail++] = pid;
+//         }
+//         i++;
+//     }
+//     cpu_counter = 0;
+// }
+
+// void schedule() {
+//     cpu_counter = 0;
+//     old_head = queue_head;
+//     printf("Starting commands\n");
+//     pid_t pid;
+
+//     while (cpu_counter != NCPU && !queue_empty()) {
+//         pid = queue[queue_head++];
+//         kill(pid, SIGCONT);
+//         cpu_counter++;
+//     }
+
+//     printf("Running commands\n");
+
+//     // Timer starts here
+//     struct sigaction sa;
+//     sa.sa_handler = timer_handler;
+//     sa.sa_flags = 0;
+//     sigemptyset(&sa.sa_mask);
+//     sigaction(SIGALRM, &sa, NULL);
+
+//     // Set an initial timer
+//     struct itimerval timer;
+//     timer.it_value.tv_sec = 0;
+//     timer.it_value.tv_usec = TSLICE * 1000;
+//     timer.it_interval = timer.it_value;
+//     if (!queue_empty()) {
+//         setitimer(ITIMER_REAL, &timer, NULL);
+//     }
+// }
+
+void schedule(){
+    kill(queue[0] , SIGCONT);
+    kill(queue[1] , SIGCONT);
+    sleep(1);
+    kill(queue[0] , SIGKILL);
+    kill(queue[1] , SIGKILL);
+    printf("______________");
+        kill(queue[0] , SIGCONT);
+    kill(queue[1] , SIGCONT);
+    sleep(1);
+    kill(queue[0] , SIGKILL);
+    kill(queue[1] , SIGKILL);
+    printf("______________");
+        kill(queue[0] , SIGCONT);
+    kill(queue[1] , SIGCONT);
+    sleep(1);
+    kill(queue[0] , SIGKILL);
+    kill(queue[1] , SIGKILL);
+    printf("______________");
+        kill(queue[0] , SIGCONT);
+    kill(queue[1] , SIGCONT);
+    sleep(1);
+    kill(queue[0] , SIGKILL);
+    kill(queue[1] , SIGKILL);
+    printf("______________");
+        kill(queue[0] , SIGCONT);
+    kill(queue[1] , SIGCONT);
+    sleep(1);
+    kill(queue[0] , SIGKILL);
+    kill(queue[1] , SIGKILL);
+    printf("______________");
+
+
 }
-
-void schedule() {
-    int cpu_counter = 0;
-    int old_head = queue_head;
-    printf("Starting commands\n");
-    pid_t pid;
-
-    while (cpu_counter != NCPU && !queue_empty()) {
-        pid = queue[queue_head++];
-        kill(pid, SIGCONT);
-        cpu_counter++;
-    }
-
-    printf("Running commands\n");
-
-    usleep(TSLICE * 1000);
-    int status;
-    int i = 0;
-
-    while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
-        pid = queue[old_head++];
-        kill(pid, SIGSTOP);
-        waitpid(pid, &status, 0);
-
-        if (!WIFEXITED(status)) {
-            queue[queue_tail++] = pid;
-        }
-        i++;
-    }
-}
-
-
-
 char** break_spaces(char *str) {  
     char **command;
     char *sep = " \n";
@@ -138,25 +195,16 @@ int main(int argc, char const *argv[])
     printf("\n Shell started \n");
     printf("-------------------------------\n");
 
-
     char* str = Input();
     queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-    queue_command(break_spaces(str));
-
     printf("Executing commands\n");
+    printf("%d" , queue[0]);
+    sleep(3);
+    int pid = queue[0];
+    kill( pid, SIGCONT);
 
-    while (!queue_empty())
-    {
-        schedule();
-    }
+        //schedule();
+    
     
     return 0;
 }

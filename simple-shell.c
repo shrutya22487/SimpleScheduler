@@ -116,6 +116,39 @@ void executeCommand(char** argv) {  // check
     }
 }
 
+int queue_empty (){
+    return queue_head == queue_tail;
+}
+
+void schedule() {
+    int cpu_counter = 0;
+    int old_head = queue_head;
+    printf("Starting commands\n");
+    pid_t pid;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        pid = queue[queue_head++];
+        kill(pid, SIGCONT);
+        cpu_counter++;
+    }
+
+    printf("Running commands\n");
+
+    usleep(TSLICE * 1000);
+    int status;
+    int i = 0;
+
+    while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
+        pid = queue[old_head++];
+        kill(pid, SIGSTOP);
+        waitpid(pid, &status, 0);
+
+        if (!WIFEXITED(status)) {
+            queue[queue_tail++] = pid;
+        }
+        i++;
+    }
+}
 
 char** break_spaces(char *str) {  
     char **command;
