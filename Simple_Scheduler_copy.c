@@ -28,6 +28,7 @@ int pid_history[100], child_pid;
 long time_history[100][2], start_time;
 bool flag_for_Input = true;
 int count_history = 0, queue_head = 0, queue_tail = 0, NCPU, TSLICE;
+pid_t queue[100];
 
 typedef struct {
     int pid;
@@ -93,81 +94,153 @@ bool newline_checker(char *line, int len) {
     return flag1 || flag2;
 }
 
-void executeCommand(char **argv, int queue[], int priority) {
+// void executeCommand(char **argv, int queue[], int priority) {
+//     int pid = fork();
+//     child_pid = pid;
+
+//     if (pid < 0) {
+//         printf("Forking child failed.\n");
+//         exit(1);
+//     } else if (pid == 0) { // Child process
+//         signal(SIGCONT, SIG_DFL);
+//         execvp(argv[0], argv);
+//         printf("Command failed.\n");
+//         exit(1);
+//     } else {
+//         queue[queue_head++] = pid;
+//         int ret;
+//         int pid = wait(&ret);
+
+//         if (WIFEXITED(ret)) {
+//             if (WEXITSTATUS(ret) == -1) {
+//                 printf("Exit = -1\n");
+//             }
+//         } else {
+//             printf("\nAbnormal termination with pid :%d\n", pid);
+//         }
+
+//         return;
+//     }
+// }
+
+// void schedule(int signum, int queue[], int priorities[], int queue_size) {
+//     // Sort the jobs in the queue based on priority (higher priority first)
+//     for (int i = 0; i < queue_size - 1; i++) {
+//         for (int j = i + 1; j < queue_size; j++) {
+//             if (priorities[i] < priorities[j]) {
+//                 int temp_pid = queue[i];
+//                 int temp_priority = priorities[i];
+//                 queue[i] = queue[j];
+//                 priorities[i] = priorities[j];
+//                 queue[j] = temp_pid;
+//                 priorities[j] = temp_priority;
+//             }
+//         }
+//     }
+
+//     // Signal the first NCPU processes in the ready queue to start execution
+//     for (int i = 0; i < NCPU && i < queue_size; i++) {
+//         int pid = queue[i];
+//         kill(pid, SIGCONT);
+//     }
+
+//     // Pause the running processes after TSLICE milliseconds
+//     usleep(TSLICE * 1000);
+
+//     // Check for completed processes and remove them from the queue
+//     int i = queue_head;
+//     while (i < queue_size) {
+//         int pid = queue[i];
+//         int status;
+//         int result = waitpid(pid, &status, WNOHANG);
+//         if (result == -1) {
+//             // Error handling
+//         } else if (result == 0) {
+//             // The process is still running
+//             i++;
+//         } else {
+//             // The process has terminated, remove it from the queue
+//             queue_head++;
+//         }
+//     }
+
+//     // Requeue the paused processes to the rear of the ready queue
+//     for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
+//         int pid = queue[i];
+//         kill(pid, SIGSTOP);
+//         queue[queue_head++] = pid;
+//     }
+// }
+
+
+void executeCommand(char** argv) {  
     int pid = fork();
     child_pid = pid;
 
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
-    } else if (pid == 0) { // Child process
-        signal(SIGCONT, SIG_DFL);
-        execvp(argv[0], argv);
+    }
+
+    else if (pid == 0) { //child process
+
+        execvp(argv[0], argv); 
         printf("Command failed.\n");
         exit(1);
-    } else {
-        queue[queue_head++] = pid;
+    }
+
+    else { 
+        
         int ret;
         int pid = wait(&ret);
 
         if (WIFEXITED(ret)) {
-            if (WEXITSTATUS(ret) == -1) {
+            if (WEXITSTATUS(ret) == -1)
+            {
                 printf("Exit = -1\n");
             }
         } else {
-            printf("\nAbnormal termination with pid :%d\n", pid);
+            printf("\nAbnormal termination with pid :%d\n" , pid);
         }
-
+        
         return;
     }
 }
 
-void schedule(int signum, int queue[], int priorities[], int queue_size) {
-    // Sort the jobs in the queue based on priority (higher priority first)
-    for (int i = 0; i < queue_size - 1; i++) {
-        for (int j = i + 1; j < queue_size; j++) {
-            if (priorities[i] < priorities[j]) {
-                int temp_pid = queue[i];
-                int temp_priority = priorities[i];
-                queue[i] = queue[j];
-                priorities[i] = priorities[j];
-                queue[j] = temp_pid;
-                priorities[j] = temp_priority;
-            }
-        }
+int queue_empty (){
+    return queue_head == queue_tail;
+}
+
+void schedule() {
+    int cpu_counter = 0;// tells how many processes have been continued
+    int old_head = queue_head;
+    printf("Starting commands\n");
+    pid_t pid;
+
+    while (cpu_counter != NCPU && !queue_empty()) {// to take in NCPU processes or till the queue is empty
+        pid = queue[queue_head++];
+        kill(pid, SIGCONT); // continue the process
+        cpu_counter++;
     }
 
-    // Signal the first NCPU processes in the ready queue to start execution
-    for (int i = 0; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGCONT);
-    }
+    printf("Running commands\n");
 
-    // Pause the running processes after TSLICE milliseconds
-    usleep(TSLICE * 1000);
+    // timer code will be here , for now assume there is some timer which runs the code for a specific TSLICE
+    int status;// to check exit status of the porcesses
+    int i = 0;
 
-    // Check for completed processes and remove them from the queue
-    int i = queue_head;
-    while (i < queue_size) {
-        int pid = queue[i];
-        int status;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == -1) {
-            // Error handling
-        } else if (result == 0) {
-            // The process is still running
-            i++;
-        } else {
-            // The process has terminated, remove it from the queue
-            queue_head++;
-        }
-    }
-
-    // Requeue the paused processes to the rear of the ready queue
-    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
+    while (i < cpu_counter) { // stops the processes and adds to queue only if they are not finished
+        pid = queue[old_head++];
         kill(pid, SIGSTOP);
-        queue[queue_head++] = pid;
+        waitpid(pid, &status, WNOHANG);//WNOHANG will check if the program has finished executing
+                                       // if it has finished then WIFEXITED will be true.
+                                       //if not finished then waitpid won't wait for process to finish(non-blocking)and
+                                       //WIFEXITED will be false
+
+        if (!WIFEXITED(status)) {
+            queue[queue_tail++] = pid;
+        }
+        i++;
     }
 }
 

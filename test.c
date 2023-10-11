@@ -14,7 +14,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 100;
+int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU = 2 , TSLICE = 1000;
 int queue[100];
 int cpu_counter = 0 , old_head = 0;
 
@@ -57,7 +57,7 @@ void queue_command(char** argv) {
 
 int queue_empty (){
     return queue_head == queue_tail;
-}\
+}
 
 
 
@@ -109,40 +109,7 @@ int queue_empty (){
 //     }
 // }
 
-void schedule(){
-    kill(queue[0] , SIGCONT);
-    kill(queue[1] , SIGCONT);
-    sleep(1);
-    kill(queue[0] , SIGKILL);
-    kill(queue[1] , SIGKILL);
-    printf("______________");
-        kill(queue[0] , SIGCONT);
-    kill(queue[1] , SIGCONT);
-    sleep(1);
-    kill(queue[0] , SIGKILL);
-    kill(queue[1] , SIGKILL);
-    printf("______________");
-        kill(queue[0] , SIGCONT);
-    kill(queue[1] , SIGCONT);
-    sleep(1);
-    kill(queue[0] , SIGKILL);
-    kill(queue[1] , SIGKILL);
-    printf("______________");
-        kill(queue[0] , SIGCONT);
-    kill(queue[1] , SIGCONT);
-    sleep(1);
-    kill(queue[0] , SIGKILL);
-    kill(queue[1] , SIGKILL);
-    printf("______________");
-        kill(queue[0] , SIGCONT);
-    kill(queue[1] , SIGCONT);
-    sleep(1);
-    kill(queue[0] , SIGKILL);
-    kill(queue[1] , SIGKILL);
-    printf("______________");
 
-
-}
 char** break_spaces(char *str) {  
     char **command;
     char *sep = " \n";
@@ -188,7 +155,29 @@ char* Input(){
     return input_str;
 }
 
+void timer_handler(int signum){
+    printf("________\n");
+    kill( queue[0], SIGKILL);
+    kill( queue[1], SIGKILL);
 
+}
+void timer(){
+    kill( queue[0], SIGCONT);
+    kill( queue[1], SIGCONT);
+    printf("-------------\n");
+    struct sigaction sa;
+    sa.sa_handler = timer_handler;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGALRM, &sa, NULL);
+
+    // Set an initial timer
+    struct itimerval timer;
+    timer.it_value.tv_sec = 0;
+    timer.it_value.tv_usec = TSLICE * 1000;
+    timer.it_interval = timer.it_value;
+    setitimer(ITIMER_REAL, &timer, NULL);
+}
 int main(int argc, char const *argv[])
 {
     printf("-------------------------------\n");
@@ -197,14 +186,24 @@ int main(int argc, char const *argv[])
 
     char* str = Input();
     queue_command(break_spaces(str));
-    printf("Executing commands\n");
-    printf("%d" , queue[0]);
-    sleep(3);
-    int pid = queue[0];
-    kill( pid, SIGCONT);
+    queue_command(break_spaces(str));
 
-        //schedule();
+    printf("Executing commands\n");
+    timer();
+    timer_handler();
+        timer();
+    timer_handler();
+        timer();
+    timer_handler();
+        timer();
+    timer_handler();
+        timer();
+    timer_handler();
+        timer();
+    timer_handler();
+
     
+
     
     return 0;
 }
