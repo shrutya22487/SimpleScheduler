@@ -2,6 +2,7 @@
     "files.associations": {
         "time.h": "c",
         "unistd.h": "c",
-        "signal.h": "c"
+        "signal.h": "c",
+        "stdbool.h": "c"
     }
 }
