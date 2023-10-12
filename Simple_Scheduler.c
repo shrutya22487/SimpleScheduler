@@ -10,7 +10,6 @@
 #include <time.h>
 #include <errno.h>
 #include "Simple_Scheduler.h"
-#include "simple-shell(1).h"
 
 int front= 0 , rear = 0 , NCPU , TSLICE;
 
@@ -143,23 +142,6 @@ void sort_jobs(Job jobs[], int count) {
     }
 }
 
-void simple_scheduler(int ncpu , int tslice){
-    
-    while (true)
-    {
-        if (!queue_empty())
-        {
-            round_robin();
-        }
-
-    }
-    
-    
-    
-    //queue_command(command);
-    NCPU = ncpu;
-    TSLICE = tslice;    
-}
 
 void round_robin(){
     //sort_queue();
@@ -232,13 +214,30 @@ char* Input(){   // to take input from user , returns the string entered
     return input_str;
 }
 
+void simple_scheduler(int ncpu , int tslice){
+    
+    while (true)
+    {
+        if (!queue_empty())
+        {
+            round_robin();
+        }
+
+    }
+    
+    
+    
+    //queue_command(command);
+    NCPU = ncpu;
+    TSLICE = tslice;    
+}
 
 int main(int argc, char const *argv[])
 {
     // handle Ctrl+C signal here
-    // queue_command( break_spaces( Input() ) );
-    // queue_command( break_spaces( Input() ) );
-    // queue_command( break_spaces( Input() ) );
+    queue_command( break_spaces( Input() ) );
+    queue_command( break_spaces( Input() ) );
+    queue_command( break_spaces( Input() ) );
 
     NCPU = 2 , TSLICE = 4000;
     struct sigevent sev;
