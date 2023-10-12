@@ -22,7 +22,7 @@ typedef struct {
 
 Job queue[200];
 int count_jobs;
-
+struct itimerspec timer_spec; 
 
 
 void queue_command(char** command){
@@ -63,6 +63,10 @@ void queue_command(char** command){
     
 }
 
+int queue_empty(){
+    return front == rear;
+
+}
 
 void sort_queue(){
 
@@ -76,30 +80,33 @@ void simple_scheduler(int ncpu , int tslice , char **command){
 }
 
 void round_robin(){
+    sort_queue();
+    
     int cpu_counter = 0;
     int old_head = front;
     printf("Starting commands\n");
     pid_t pid;
 
     while (cpu_counter != NCPU && !queue_empty()) {
-        pid = queue[queue_head++];
+        pid = queue[front++].pid;
         kill(pid, SIGCONT);
         cpu_counter++;
     }
 
     printf("Running commands\n");
 
-    usleep(TSLICE * 1000);
+    //Timer stuff goes here
+
     int status;
     int i = 0;
 
     while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
-        pid = queue[old_head++];
+        pid = queue[old_head].pid;
         kill(pid, SIGSTOP);
         waitpid(pid, &status, 0);
 
         if (!WIFEXITED(status)) {
-            queue[queue_tail++] = pid;
+            queue[rear++] = queue[old_head++];
         }
         i++;
     }
