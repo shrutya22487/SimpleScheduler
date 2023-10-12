@@ -10,7 +10,7 @@
 #include <time.h>
 #include "Simple_Scheduler.h"
 
-int queue_head= 0 , queue_tail = 0;
+int front= 0 , rear = 0 , NCPU , TSLICE;
 
 typedef struct {
     int pid;
@@ -20,8 +20,10 @@ typedef struct {
     long end_time;
 } Job;
 
-Job queue[100];
+Job queue[200];
 int count_jobs;
+
+
 
 void queue_command(char** command){
     int i = 0 , j = 0;
@@ -42,18 +44,74 @@ void queue_command(char** command){
     else{
         job.priority = 1;
     }
-    queue[count_jobs++] = job;
-}
+    queue[rear] = job;
+    
+    int pid = fork();
 
-void sort 
+    if (pid < 0) {
+        printf("Forking child failed.\n");
+        exit(1);
+    } else if (pid == 0) {
+        execvp( job.command[0] , job.command );
+        printf("Command failed.\n");
+        exit(1);
 
-void sort_queue( Job queue[]){
-
+    } else { 
+        queue[rear++].pid = pid;
+        kill(pid, SIGSTOP);
+    }   
     
 }
 
-void simple_scheduler(int NCPU , int TSLICE , char **command){
-    int priority = queue_command(command);
 
-    
+void sort_queue(){
+
+    //
+}
+
+void simple_scheduler(int ncpu , int tslice , char **command){
+    queue_command(command);
+    NCPU = ncpu;
+    TSLICE = tslice;    
+}
+
+void round_robin(){
+    int cpu_counter = 0;
+    int old_head = front;
+    printf("Starting commands\n");
+    pid_t pid;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        pid = queue[queue_head++];
+        kill(pid, SIGCONT);
+        cpu_counter++;
+    }
+
+    printf("Running commands\n");
+
+    usleep(TSLICE * 1000);
+    int status;
+    int i = 0;
+
+    while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
+        pid = queue[old_head++];
+        kill(pid, SIGSTOP);
+        waitpid(pid, &status, 0);
+
+        if (!WIFEXITED(status)) {
+            queue[queue_tail++] = pid;
+        }
+        i++;
+    }
+
+}
+
+//round robin code goes here
+
+int main(int argc, char const *argv[])
+{
+    // handle Ctrl+C signal here
+
+
+    return 0;
 }
