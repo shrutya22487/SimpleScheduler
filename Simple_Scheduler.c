@@ -132,7 +132,7 @@ int compare_jobs(const void *a, const void *b) {
 void sort_jobs(Job jobs[], int count) {
     for (int i = 0; i < count; i++) {
         for (int j = 0; j < count - i - 1; j++) {
-            if (jobs[j].priority < jobs[j + 1].priority) {
+            if (jobs[j].priority > jobs[j + 1].priority) {
                 // Swap jobs[j] and jobs[j+1]
                 Job temp = jobs[j];
                 jobs[j] = jobs[j + 1];
@@ -142,11 +142,23 @@ void sort_jobs(Job jobs[], int count) {
     }
 }
 
-// void simple_scheduler(int ncpu , int tslice , char **command){
-//     queue_command(command);
-//     NCPU = ncpu;
-//     TSLICE = tslice;    
-// }
+void simple_scheduler(int ncpu , int tslice){
+    
+    while (true)
+    {
+        if (!queue_empty())
+        {
+            round_robin();
+        }
+
+    }
+    
+    
+    
+    //queue_command(command);
+    NCPU = ncpu;
+    TSLICE = tslice;    
+}
 
 void round_robin(){
     //sort_queue();

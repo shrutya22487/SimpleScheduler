@@ -326,7 +326,7 @@ int main(int argc, char const *argv[]) {
     TSLICE = atoi( argv [2]);
 
     setup_signal_handler(); 
-
+    simple_scheduler(NCPU , TSLICE);
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
@@ -358,7 +358,7 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {
-                        simple_scheduler(NCPU , TSLICE , command_1);
+                        queue_command(command_1);
                     }
                     else
                     {
