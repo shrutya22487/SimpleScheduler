@@ -171,6 +171,8 @@ void round_robin(){
     sigaddset(&mask, SIGALRM);
     printf("timer running1\n");
     // Use sigtimedwait to handle the timer expiration event
+    // the timer expires over here due , and SIGALRM is sent due to which the program exits completely
+    // some error handling should be done over here 
     if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
         if (errno == EAGAIN) {
 
