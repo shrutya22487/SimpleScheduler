@@ -10,6 +10,7 @@
 #include <time.h>
 #include <errno.h>
 #include "Simple_Scheduler.h"
+#include "simple-shell(1).h"
 
 int front= 0 , rear = 0 , NCPU , TSLICE;
 

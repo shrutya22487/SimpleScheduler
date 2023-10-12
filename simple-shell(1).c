@@ -9,6 +9,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include "Simple_Scheduler.h"
+#include "simple-shell(1).h";
 
 long get_time(){
     struct timeval time, *address_time = &time;
