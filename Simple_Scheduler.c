@@ -10,23 +10,50 @@
 #include <time.h>
 #include "Simple_Scheduler.h"
 
-char** new_command;
+int queue_head= 0 , queue_tail = 0;
 
-int remove_submit(char** command){
+typedef struct {
+    int pid;
+    char** command;
+    int priority; 
+    long start_time;
+    long end_time;
+} Job;
+
+Job queue[100];
+int count_jobs;
+
+void queue_command(char** command){
     int i = 0 , j = 0;
     while (command[i] != NULL)
     {
         i++;
     }
-    int priority = 1;
-    new_command = (char**)malloc(sizeof(char*));
-    new_command[0] = command[1];
+
+    Job job;
+    job.command = (char**)malloc(sizeof(char*));
+    job.command[0] = (char*)malloc(sizeof(char)*100);
+    job.command[0] = command[1];
+
     if (i == 3)
     {
-        priority = atoi(command[2]);
+        job.priority = atoi(command[2]);
     }
-           
-    return priority;
+    else{
+        job.priority = 1;
+    }
+    queue[count_jobs++] = job;
 }
 
+void sort 
 
+void sort_queue( Job queue[]){
+
+    
+}
+
+void simple_scheduler(int NCPU , int TSLICE , char **command){
+    int priority = queue_command(command);
+
+    
+}

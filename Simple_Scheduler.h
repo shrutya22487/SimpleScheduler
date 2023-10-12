@@ -1,6 +1,7 @@
 #ifndef SIMPLE_SCHEDULER_H
 #define SIMPLE_SCHEDULER_H
 
-void add_to_queue(char **input);
+void simple_scheduler(int NCPU , int TSLICE , char **command);
 
-#endif // SIMPLE_SCHEDULER_H
+
+#endif 

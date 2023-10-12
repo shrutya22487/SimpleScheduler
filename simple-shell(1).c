@@ -25,7 +25,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0;
+int count_history = 0 , NCPU , TSLICE;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -315,12 +315,6 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
-char** remove_submit( char **command){
-
-
-}
-
-
 int main(int argc, char const *argv[]) {
     
     if ( argc != 3 )
@@ -328,7 +322,8 @@ int main(int argc, char const *argv[]) {
         printf("NCPU and TSLICE not entered!\n");
         exit(1);
     }
-    
+    NCPU = atoi(argv[1]);
+    TSLICE = atoi( argv [2]);
 
     setup_signal_handler(); 
 
@@ -363,9 +358,13 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {
-                        
+                        simple_scheduler(NCPU , TSLICE , command_1);
                     }
-                    executeCommand(command_1);
+                    else
+                    {
+                        executeCommand(command_1);
+                    }
+                    
                 }
             }
 
