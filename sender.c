@@ -12,7 +12,7 @@
 int main() {
     printf("_______\n");
 
-    mkfifo("fifo_pipe", 0666); // Create a named pipe (FIFO)
+     // Create a named pipe (FIFO)
 
     char *p = "./receiver";
     char *args[] = {"./receiver", NULL};

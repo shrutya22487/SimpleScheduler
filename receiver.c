@@ -37,16 +37,12 @@ void setup_signal_handler() {
 }
 
 int main() {
+    setup_signal_handler();
     printf("receiver started\n");
 
     mkfifo("fifo_pipe", 0666); // Create a named pipe (FIFO)
 
     fd = open("fifo_pipe", O_RDONLY); // Open the pipe for reading
-    if (fd == -1) {
-        perror("Error opening the FIFO");
-        exit(1);
-    }
-
     read_pipe(fd);
 
     close(fd);

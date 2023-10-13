@@ -8,10 +8,11 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
+#include <fcntl.h>
 #include <errno.h>
 #include "Simple_Scheduler.h"
 
-int front= 0 , rear = 0 , NCPU , TSLICE , count_jobs;
+int front= 0 , rear = 0 , NCPU , TSLICE , count_jobs , fd;
 bool RR_flag = true;
 
 
@@ -56,16 +57,43 @@ void change_RR_flag(){
 void signal_handler(int signum) {
 
     if (signum == SIGALRM) {
-        // This block is executed when the timer expires (TSLICE time has passed)
         printf("received sigalrm\n");
-        // Call your schedule function or any other relevant actions
     }
     if (signum == SIGUSR1)
-    {
+    {   
+        printf("\ncaught sigusr1\n");
         queue_command();
     }
     
 
+}
+
+char** break_spaces(char *str) {  
+    char **command;
+    char *sep = " \n";
+    command = (char**)malloc(sizeof(char*) * 100);
+    int len = 0;
+    if (command == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1); 
+    }
+
+    int i = 0;
+    char *token = strtok(str,sep ); 
+    while (token != NULL) {
+        len = strlen(token);
+        command[i] = (char*)malloc( len + 1);
+        if (command[i] == NULL) {
+            printf("Memory allocation failed\n");
+            exit(1); 
+        }
+
+        strcpy(command[i], token);
+        token = strtok(NULL, sep);
+        i++;
+    }
+    command[i] = NULL;
+    return command;
 }
 
 void setup_signal_handler() {
@@ -78,7 +106,7 @@ void setup_signal_handler() {
 
     struct sigaction sh;
     sh.sa_handler = signal_handler;
-    if (sigaction(SIGINT, &sh, NULL) != 0) {
+    if (sigaction(SIGUSR1, &sh, NULL) != 0) {
         printf("Signal handling failed.\n");
         exit(1);
     }
@@ -86,9 +114,10 @@ void setup_signal_handler() {
 }
 
 void queue_command(){
-    close(fd[1]);
-    
-    
+    char message[100];
+    read(fd, message, sizeof(message));
+    char **command = break_spaces(message);
+
     int i = 0 , j = 0;
     while (command[i] != NULL)
     {
@@ -222,4 +251,18 @@ void simple_scheduler(int ncpu , int tslice){
         perror("timer_settime");
         exit(1);
     }
+}
+
+int main(int argc, char const *argv[])
+{
+    printf("Round Robin started\n");
+    mkfifo("fifo_pipe", 0666);
+
+    fd = open("fifo_pipe", O_RDONLY); 
+
+
+    close(fd);
+
+    unlink("fifo_pipe");
+    return 0;
 }

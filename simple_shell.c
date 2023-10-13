@@ -8,6 +8,7 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
+#include <fcntl.h>
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -316,7 +317,7 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
-int run_scheduler(){
+int run_scheduler(){   
     int scheduler_pid = fork();
     char *p = "./Simple_Scheduler";
     char *args[] = {"./Simple_Scheduler" , NULL};
@@ -333,6 +334,16 @@ int run_scheduler(){
         printf("Scheduler has started now\n");
     }
 
+
+}
+
+void send_message( char *command){
+    mkfifo("fifo_pipe", 0666);
+    int fd = open("fifo_pipe", O_WRONLY); 
+    write(fd, command, strlen(command) + 1);
+    close(fd);
+
+    printf("Message sent through FIFO.\n");
 
 }
 
@@ -381,16 +392,7 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {   
-                        int fd[2];
-                        int check = pipe(fd);
-                        if (check == -1)
-                        {
-                            printf("Error in creating pipe\n");
-                            exit(1);
-                        }
                         
-                        close(fd[0]);
-                        write( fd[1] , str , sizeof(str) );
                         kill( scheduler_pid , SIGUSR1);
                     }
                     else
