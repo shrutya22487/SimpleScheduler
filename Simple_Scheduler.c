@@ -148,7 +148,6 @@ void round_robin(){
     
     int cpu_counter = 0;
     int old_head = front;
-    printf("Starting commands\n");
     pid_t pid;
 
     while (cpu_counter != NCPU && !queue_empty()) {
@@ -156,31 +155,23 @@ void round_robin(){
         kill(pid, SIGCONT);
         cpu_counter++;
     }
-
-    printf("Running commands\n");
-
-    //Timer stuff goes here
     // Timer code: Wait for the timer to expire
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGALRM);
-    printf("timer running1\n");
     // Use sigtimedwait to handle the timer expiration event
     // the timer expires over here due , and SIGALRM is sent due to which the program exits completely
     // some error handling should be done over here 
     if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
         if (errno == EAGAIN) {
-
-            printf("timer running2\n");
             // The timer expired
         } else {
-            printf("timer running3\n");
             perror("sigtimedwait");
             exit(1);
         }
     }
 
-    printf("timer running4\n");
+    printf("timer running\n");
 
     int status;
     int i = 0;
@@ -189,7 +180,7 @@ void round_robin(){
     while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
         pid = queue[old_head].pid;
         kill(pid, SIGSTOP);
-        waitpid(pid, &status, 0);
+        waitpid(pid, &status, WNOHANG);
 
         if (!WIFEXITED(status)) {
             queue[rear++] = queue[old_head++];
@@ -235,11 +226,22 @@ void simple_scheduler(int ncpu , int tslice){
 int main(int argc, char const *argv[])
 {
     // handle Ctrl+C signal here
-    queue_command( break_spaces( Input() ) );
-    queue_command( break_spaces( Input() ) );
-    queue_command( break_spaces( Input() ) );
+    char *str = Input();
+    char** command = break_spaces(str);
+    queue_command( command );
+    str = Input();
+    command = break_spaces(str);
+    queue_command( command );
+    str = Input();
+       command = break_spaces(str);
+    queue_command( command );
+    str = Input();
+       command = break_spaces(str);
+    queue_command( command );
+    str = Input();
 
-    NCPU = 2 , TSLICE = 4000;
+
+    NCPU = 2 , TSLICE = 500;
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL; // tells that event should be notified using a signal
     sev.sigev_signo = SIGALRM; //tells that SIGALRM should be used
@@ -257,13 +259,45 @@ int main(int argc, char const *argv[])
     timer_spec.it_interval.tv_sec = 0;
     timer_spec.it_interval.tv_nsec = 0;
 
+    round_robin();
+    round_robin();
+    round_robin();
+
+    round_robin();
+    round_robin();
+    round_robin();
+    round_robin();
+    round_robin();
+        round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+    round_robin();
+
+
+
     // Set the timer with the configured values
     if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
         perror("timer_settime");
         exit(1);
     }
-    round_robin();
-    round_robin();
 
+    
     return 0;
 }
