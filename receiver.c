@@ -4,25 +4,54 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include<unistd.h>
-#include<sys/types.h>
-#include<sys/wait.h>
-#include <stdbool.h>
-#include <signal.h> 
-#include <sys/time.h>
-#include <time.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/wait.h>
+
+int fd;
+
+void read_pipe() {
+    char message[100];
+    // Read the message from the FIFO
+    read(fd, message, sizeof(message));
+    printf("Received message: %s\n", message);
+}
+
+
+void signal_handler(int signum) { 
+    if (signum == SIGUSR1) {
+        printf("\ncaught sigusr1\n");
+        read_pipe();    
+        exit(0);
+    }
+}
+
+void setup_signal_handler() {
+    struct sigaction sh;
+    sh.sa_handler = signal_handler;
+    if (sigaction(SIGUSR1, &sh, NULL) != 0) {
+        printf("Signal handling failed.\n");
+        exit(1);
+    }
+    sigaction(SIGUSR1, &sh, NULL);
+}
+
 int main() {
-    const char* fifoName = "/tmp/simplescheduler_fifo";
-    int fifo_fd = open(fifoName, O_RDONLY);
+    printf("receiver started\n");
 
-    char command[256];  
-    ssize_t bytes_read;
+    mkfifo("fifo_pipe", 0666); // Create a named pipe (FIFO)
 
-    bytes_read = read(fifo_fd, command, sizeof(command));
-    close(fifo_fd);
+    fd = open("fifo_pipe", O_RDONLY); // Open the pipe for reading
+    if (fd == -1) {
+        perror("Error opening the FIFO");
+        exit(1);
+    }
+
+    read_pipe(fd);
+
+    close(fd);
+
+    unlink("fifo_pipe"); // Remove the FIFO file from the filesystem
 
     return 0;
 }
