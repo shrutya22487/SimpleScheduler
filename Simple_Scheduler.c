@@ -11,13 +11,9 @@
 #include <errno.h>
 #include "Simple_Scheduler.h"
 
-int front= 0 , rear = 0 , NCPU , TSLICE;
+int front= 0 , rear = 0 , NCPU , TSLICE , count_jobs;
+bool RR_flag = true;
 
-char history[100][100];
-int pid_history[100],  child_pid;
-long time_history[100][2],start_time;
-bool flag_for_Input = true;
-int count_history = 0, queue_head= 0 , queue_tail = 0, NCPU , TSLICE ;
 
 typedef struct {
     int pid;
@@ -28,11 +24,36 @@ typedef struct {
 } Job;
 
 Job queue[200];
-int count_jobs;
 struct itimerspec timer_spec; 
 timer_t timerid;
 
-void signal_handler(int signum) {
+void stableSelectionSort(Job arr[], int n) {
+    int i, j, minIndex;
+    Job temp;
+
+    for (i = 0; i < n - 1; i++) {
+        minIndex = i;
+        for (j = i + 1; j < n; j++) {
+            if (arr[j].priority < arr[minIndex].priority || (arr[j].priority == arr[minIndex].priority && j < minIndex)) {
+                minIndex = j;
+            }
+        }
+
+        // Swap arr[i] and arr[minIndex]
+        temp = arr[minIndex];
+        for (j = minIndex; j > i; j--) {
+            arr[j] = arr[j - 1];
+        }
+        arr[i] = temp;
+    }
+}
+
+
+void change_RR_flag(){
+    RR_flag = false;
+}
+
+void signal_handler_(int signum) {
 
     if (signum == SIGALRM) {
         // This block is executed when the timer expires (TSLICE time has passed)
@@ -40,16 +61,18 @@ void signal_handler(int signum) {
         // Call your schedule function or any other relevant actions
     }
 }
-void setup_signal_handler() {
+
+void setup_signal_handler_() {
     struct sigaction sh_alarm;
 
     
-    sh_alarm.sa_handler = signal_handler;
+    sh_alarm.sa_handler = signal_handler_;
     if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
         printf("Signal handling for SIGALRM failed.\n");
         exit(1);
     }
 }
+
 void queue_command(char** command){
     int i = 0 , j = 0;
     while (command[i] != NULL)
@@ -88,47 +111,11 @@ void queue_command(char** command){
     
 }
 
-char** break_spaces(char *str) {  
-    char **command;
-    char *sep = " \n";
-    command = (char**)malloc(sizeof(char*) * 100);
-    int len = 0;
-    if (command == NULL) {
-        printf("Memory allocation failed\n");
-        exit(1); 
-    }
-
-    int i = 0;
-    char *token = strtok(str,sep ); 
-    while (token != NULL) {
-        len = strlen(token);
-        command[i] = (char*)malloc( len + 1);
-        if (command[i] == NULL) {
-            printf("Memory allocation failed\n");
-            exit(1); 
-        }
-
-        strcpy(command[i], token);
-        token = strtok(NULL, sep);
-        i++;
-    }
-    command[i] = NULL;
-    return command;
-}
-
 int queue_empty(){
     return front == rear;
 
 }
 
-// Function to compare two jobs for sorting
-int compare_jobs(const void *a, const void *b) {
-    const Job *jobA = (const Job *)a;
-    const Job *jobB = (const Job *)b;
-    return jobB->priority - jobA->priority; // Sorting in descending order of priority
-}
-
-// Hardcoded sorting function for jobs
 void sort_jobs(Job jobs[], int count) {
     for (int i = 0; i < count; i++) {
         for (int j = 0; j < count - i - 1; j++) {
@@ -155,13 +142,9 @@ void round_robin(){
         kill(pid, SIGCONT);
         cpu_counter++;
     }
-    // Timer code: Wait for the timer to expire
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGALRM);
-    // Use sigtimedwait to handle the timer expiration event
-    // the timer expires over here due , and SIGALRM is sent due to which the program exits completely
-    // some error handling should be done over here 
     if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
         if (errno == EAGAIN) {
             // The timer expired
@@ -176,8 +159,7 @@ void round_robin(){
     int status;
     int i = 0;
 
-
-    while (i < cpu_counter) { // Change the loop condition to i < cpu_counter
+    while (i < cpu_counter) { 
         pid = queue[old_head].pid;
         kill(pid, SIGSTOP);
         waitpid(pid, &status, WNOHANG);
@@ -189,59 +171,11 @@ void round_robin(){
     }
 }
 
-char* Input(){   // to take input from user , returns the string entered
-    char *input_str = (char*)malloc(100);
-    if (input_str == NULL) {
-        printf("Memory allocation failed\n");
-        exit(1); 
-    }
-    flag_for_Input = false;
-    fgets(input_str ,100, stdin);
-    
-    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
-    {   
-        flag_for_Input = true;
-    }
-    return input_str;
-}
 
 void simple_scheduler(int ncpu , int tslice){
-    
-    while (true)
-    {
-        if (!queue_empty())
-        {
-            round_robin();
-        }
-
-    }
-    
-    
-    
-    //queue_command(command);
     NCPU = ncpu;
-    TSLICE = tslice;    
-}
+    TSLICE = tslice;  
 
-int main(int argc, char const *argv[])
-{
-    // handle Ctrl+C signal here
-    char *str = Input();
-    char** command = break_spaces(str);
-    queue_command( command );
-    str = Input();
-    command = break_spaces(str);
-    queue_command( command );
-    str = Input();
-       command = break_spaces(str);
-    queue_command( command );
-    str = Input();
-       command = break_spaces(str);
-    queue_command( command );
-    str = Input();
-
-
-    NCPU = 2 , TSLICE = 500;
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL; // tells that event should be notified using a signal
     sev.sigev_signo = SIGALRM; //tells that SIGALRM should be used
@@ -259,45 +193,18 @@ int main(int argc, char const *argv[])
     timer_spec.it_interval.tv_sec = 0;
     timer_spec.it_interval.tv_nsec = 0;
 
-    round_robin();
-    round_robin();
-    round_robin();
+    
 
-    round_robin();
-    round_robin();
-    round_robin();
-    round_robin();
-    round_robin();
-        round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-    round_robin();
-
-
-
-    // Set the timer with the configured values
+    while (RR_flag)
+    {
+        if (!queue_empty())
+        {
+            round_robin();
+        }
+    }
+    printf("Scheduler exited\n");
     if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
         perror("timer_settime");
         exit(1);
     }
-
-    
-    return 0;
 }

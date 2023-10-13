@@ -9,7 +9,6 @@
 #include <sys/time.h>
 #include <time.h>
 #include "Simple_Scheduler.h"
-#include "simple-shell(1).h";
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -26,7 +25,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0 , NCPU , TSLICE;
+int count_history = 0 , ncpu , tslice;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -50,10 +49,11 @@ void display_history() {
     }
 }
 
-void signal_handler(int signum) { // check
+void signal_handler(int signum) { 
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
-        display_history();        
+        display_history();   
+        change_RR_flag();     
         exit(0);
     }
 }
@@ -81,7 +81,7 @@ bool newline_checker( char* line  , int len){
     return flag1 || flag2;
 }
 
-void executeCommand(char** argv) {  // check
+void executeCommand(char** argv) {  
     int pid = fork();
     child_pid = pid;
 
@@ -316,6 +316,8 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
+
+
 int main(int argc, char const *argv[]) {
     
     if ( argc != 3 )
@@ -323,24 +325,41 @@ int main(int argc, char const *argv[]) {
         printf("NCPU and TSLICE not entered!\n");
         exit(1);
     }
-    NCPU = atoi(argv[1]);
-    TSLICE = atoi( argv [2]);
+    ncpu = atoi(argv[1]);
+    tslice = atoi( argv [2]);
 
     setup_signal_handler(); 
-    simple_scheduler(NCPU , TSLICE);
+    simple_scheduler(ncpu , tslice);
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
         exit(1);
     }
 
+    int scheduler_pid = fork();
+    char *p = "./";
+    char *args[] = {"./test_1" , NULL};
+
+    if (pid < 0) {
+        printf("Forking child failed.\n");
+        exit(1);
+    } else if (pid == 0) {
+        execvp( p , args );
+        printf("Command failed.\n");
+        exit(1);
+
+    } else {
+        sleep(3);
+        kill(pid,SIGUSR1);
+
+    } 
     char c[100]; // to print the current directory
     printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
 
     while (1) {
         getcwd(c, sizeof(c));
         printf("Shell> %s>>> ", c);
-        str = Input(); // Get user input
+        str = Input(); 
         if (flag_for_Input == true) {
             strcpy(str_for_history, str);
             start_time = get_time();
@@ -358,7 +377,8 @@ int main(int argc, char const *argv[]) {
                 } else {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
-                    {
+                    {   
+
                         queue_command(command_1);
                     }
                     else
