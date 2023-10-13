@@ -43,8 +43,7 @@ int main() {
     mkfifo("fifo_pipe", 0666); // Create a named pipe (FIFO)
 
     fd = open("fifo_pipe", O_RDONLY); // Open the pipe for reading
-    read_pipe(fd);
-
+    pause();
     close(fd);
 
     unlink("fifo_pipe"); // Remove the FIFO file from the filesystem

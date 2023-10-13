@@ -9,6 +9,15 @@
 #include <sys/time.h>
 #include <time.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <signal.h>
+#include <sys/wait.h>
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -25,7 +34,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0 , ncpu , tslice;
+int count_history = 0 , ncpu , tslice , fd , scheduler_pid ;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -52,8 +61,9 @@ void display_history() {
 void signal_handler(int signum) { 
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
-        display_history();   
-        change_RR_flag();     
+        display_history();
+        close(fd);   
+        //change_RR_flag();     
         exit(0);
     }
 }
@@ -317,20 +327,29 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
-int run_scheduler(){   
-    int scheduler_pid = fork();
+void run_scheduler(){   
+    char ncpu_str[10];
+    char tslice_str[10];
+    snprintf(ncpu_str, sizeof(ncpu_str), "%d", ncpu);
+    snprintf(tslice_str, sizeof(tslice_str), "%d", tslice);
     char *p = "./Simple_Scheduler";
-    char *args[] = {"./Simple_Scheduler" , NULL};
+    char *args[] = {"./Simple_Scheduler" , ncpu_str , tslice_str,  NULL};
+    
+    int pid = fork();
 
-    if (scheduler_pid < 0) {
+    if (pid< 0) {
         printf("Forking child failed.\n");
         exit(1);
-    } else if (scheduler_pid == 0) {
+    } else if (pid == 0) {
         execvp( p , args );
         printf("Command failed.\n");
         exit(1);
 
     } else {
+        sleep(2);
+        scheduler_pid = pid;
+        kill(pid , SIGUSR1);
+
         printf("Scheduler has started now\n");
     }
 
@@ -338,11 +357,7 @@ int run_scheduler(){
 }
 
 void send_message( char *command){
-    mkfifo("fifo_pipe", 0666);
-    int fd = open("fifo_pipe", O_WRONLY); 
     write(fd, command, strlen(command) + 1);
-    close(fd);
-
     printf("Message sent through FIFO.\n");
 
 }
@@ -357,15 +372,18 @@ int main(int argc, char const *argv[]) {
     ncpu = atoi(argv[1]);
     tslice = atoi( argv [2]);
 
-    setup_signal_handler(); 
-    int scheduler_pid = run_scheduler();   
+    // mkfifo("fifo_pipe", 0666);
+    // fd = open("fifo_pipe", O_WRONLY); 
 
+    setup_signal_handler(); 
+    run_scheduler();   
+    printf("%d \n" , scheduler_pid);
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
         exit(1);
     }
-
+    kill( scheduler_pid , SIGUSR1);
      
     char c[100]; // to print the current directory
     printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
@@ -392,8 +410,10 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {   
-                        
-                        kill( scheduler_pid , SIGUSR1);
+
+        
+                        //send_message(str);
+                        printf("%d\n",kill( scheduler_pid , SIGUSR1)); 
                     }
                     else
                     {

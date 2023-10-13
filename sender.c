@@ -12,7 +12,7 @@
 int main() {
     printf("_______\n");
 
-     // Create a named pipe (FIFO)
+    mkfifo("fifo_pipe", 0666); // Create a named pipe (FIFO)
 
     char *p = "./receiver";
     char *args[] = {"./receiver", NULL};
@@ -35,12 +35,11 @@ int main() {
             perror("Error opening the FIFO");
             exit(1);
         }
-
         // Send the message "submit ./a.out to the receiver" through the FIFO
         char *message = "submit ./a.out to the receiver";
         write(fd, message, strlen(message) + 1);
         close(fd);
-
+        kill(pid , SIGUSR1);
         printf("Message sent through FIFO.\n");
 
     }
