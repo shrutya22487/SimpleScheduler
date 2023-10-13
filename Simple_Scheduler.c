@@ -53,27 +53,42 @@ void change_RR_flag(){
     RR_flag = false;
 }
 
-void signal_handler_(int signum) {
+void signal_handler(int signum) {
 
     if (signum == SIGALRM) {
         // This block is executed when the timer expires (TSLICE time has passed)
         printf("received sigalrm\n");
         // Call your schedule function or any other relevant actions
     }
+    if (signum == SIGUSR1)
+    {
+        queue_command();
+    }
+    
+
 }
 
-void setup_signal_handler_() {
-    struct sigaction sh_alarm;
-
-    
-    sh_alarm.sa_handler = signal_handler_;
+void setup_signal_handler() {
+    struct sigaction sh_alarm;   
+    sh_alarm.sa_handler = signal_handler;
     if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
         printf("Signal handling for SIGALRM failed.\n");
         exit(1);
     }
+
+    struct sigaction sh;
+    sh.sa_handler = signal_handler;
+    if (sigaction(SIGINT, &sh, NULL) != 0) {
+        printf("Signal handling failed.\n");
+        exit(1);
+    }
+    sigaction(SIGUSR1, &sh, NULL);
 }
 
-void queue_command(char** command){
+void queue_command(){
+    close(fd[1]);
+    
+    
     int i = 0 , j = 0;
     while (command[i] != NULL)
     {

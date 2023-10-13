@@ -8,7 +8,6 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
-#include "Simple_Scheduler.h"
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -118,6 +117,7 @@ void executeCommand(char** argv) {
         return;
     }
 }
+
 void executePipe(char ***commands) {  // CHECK
     int i = 0, pid;
     int inputfd = STDIN_FILENO;  
@@ -316,7 +316,25 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
+int run_scheduler(){
+    int scheduler_pid = fork();
+    char *p = "./Simple_Scheduler";
+    char *args[] = {"./Simple_Scheduler" , NULL};
 
+    if (scheduler_pid < 0) {
+        printf("Forking child failed.\n");
+        exit(1);
+    } else if (scheduler_pid == 0) {
+        execvp( p , args );
+        printf("Command failed.\n");
+        exit(1);
+
+    } else {
+        printf("Scheduler has started now\n");
+    }
+
+
+}
 
 int main(int argc, char const *argv[]) {
     
@@ -329,30 +347,15 @@ int main(int argc, char const *argv[]) {
     tslice = atoi( argv [2]);
 
     setup_signal_handler(); 
-    simple_scheduler(ncpu , tslice);
+    int scheduler_pid = run_scheduler();   
+
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
         exit(1);
     }
 
-    int scheduler_pid = fork();
-    char *p = "./";
-    char *args[] = {"./test_1" , NULL};
-
-    if (pid < 0) {
-        printf("Forking child failed.\n");
-        exit(1);
-    } else if (pid == 0) {
-        execvp( p , args );
-        printf("Command failed.\n");
-        exit(1);
-
-    } else {
-        sleep(3);
-        kill(pid,SIGUSR1);
-
-    } 
+     
     char c[100]; // to print the current directory
     printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
 
@@ -378,8 +381,17 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {   
-
-                        queue_command(command_1);
+                        int fd[2];
+                        int check = pipe(fd);
+                        if (check == -1)
+                        {
+                            printf("Error in creating pipe\n");
+                            exit(1);
+                        }
+                        
+                        close(fd[0]);
+                        write( fd[1] , str , sizeof(str) );
+                        kill( scheduler_pid , SIGUSR1);
                     }
                     else
                     {

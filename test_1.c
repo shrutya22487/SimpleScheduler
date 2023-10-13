@@ -10,8 +10,26 @@
 #include <time.h>
 #include <errno.h>
 
+void read_pipe(){
+    int fd[2];
+    char *str = (char*)malloc(sizeof(char) * 100);
+    int check = pipe(fd);
+    if (check == -1)
+    {
+        printf("Pipe could not be created\n");
+        exit(1);
+    }
+    close(fd[1]);
+    read( fd[0] , str , sizeof(str) );
+    close(fd[0]);
+    puts(str);
+    
+
+}
+
 void signal_handler(int signum) { 
     if (signum == SIGUSR1) {
+        read_pipe();
         printf("\ncaught sigusr1\n");    
         exit(0);
     }
