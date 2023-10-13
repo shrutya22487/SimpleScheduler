@@ -9,13 +9,14 @@
 #include <sys/time.h>
 #include <time.h>
 #include <errno.h>
-int main(int argc, char const *argv[])
+int main()
 {   
+    printf("meow");
 
     int pid = fork();
     char *p = "./test_1";
     char *args[] = {"./test_1" , NULL};
-    printf("meow\n");
+        printf("meow");
 
     if (pid < 0) {
         printf("Forking child failed.\n");
@@ -26,12 +27,11 @@ int main(int argc, char const *argv[])
         exit(1);
 
     } else {
-        sleep(1);
-
-
         char *str = "submit ./a.out";
         int fd[2];
         int check = pipe(fd);
+                printf("meow");
+
         if (check == -1)
         {
             printf("Error in creating pipe\n");
@@ -40,9 +40,11 @@ int main(int argc, char const *argv[])
 
 
         close(fd[0]);
-        write( fd[1] , str , sizeof(str) );
-        close(fd[1]);
+                printf("meow");
 
+        write( fd[1] , str , sizeof(str) );
+        
+        close(fd[1]);
 
         kill(pid,SIGUSR1);
 

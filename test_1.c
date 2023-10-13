@@ -8,8 +8,6 @@
 #include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
-#include <errno.h>
-
 void read_pipe(){
     int fd[2];
     char *str = (char*)malloc(sizeof(char) * 100);
@@ -19,8 +17,11 @@ void read_pipe(){
         printf("Pipe could not be created\n");
         exit(1);
     }
+
     close(fd[1]);
+    printf("ffds");
     read( fd[0] , str , sizeof(str) );
+    printf("%s" , str);
     close(fd[0]);
     puts(str);
     
@@ -29,6 +30,7 @@ void read_pipe(){
 
 void signal_handler(int signum) { 
     if (signum == SIGUSR1) {
+        printf("meow");
         read_pipe();
         printf("\ncaught sigusr1\n");    
         exit(0);
