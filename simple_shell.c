@@ -9,15 +9,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <sys/wait.h>
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -63,8 +55,7 @@ void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
-        close(fd);   
-        //change_RR_flag();     
+        kill( scheduler_pid , SIGINT );
         exit(0);
     }
 }

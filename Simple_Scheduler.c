@@ -9,20 +9,16 @@
 #include <sys/time.h>
 #include <time.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <sys/wait.h>
+#include <errno.h>
 
 int front= 0 , rear = 0 , NCPU , TSLICE , count_jobs , fd;
-bool RR_flag = true;
-
+char history[100][100];
+int pid_history[100],  child_pid;
+long time_history[100][2],start_time;
+bool flag_for_Input = true;
+int count_history = 0;
+char message_str[256];
 
 typedef struct {
     int pid;
@@ -57,6 +53,48 @@ void stableSelectionSort(Job arr[], int n) {
     }
 }
 
+void display_history() {
+    printf("-------------------------------\n");
+    printf("\n Command History: for scheduler \n");
+    printf("-------------------------------\n");
+
+    for (int i = 0; i < count_history; i++) {
+        printf("Command: %s\n", history[i]);
+        printf("PID: %d\n", pid_history[i]);
+        printf("Start_Time: %ld\n", time_history[i][0]);
+        printf("End_Time: %ld\n", time_history[i][1]);
+        printf("-------------------------------\n");
+    }
+}
+
+void signal_handler(int signum) { 
+    if (signum == SIGINT) {
+        printf("\n---------------------------------\n");
+        display_history();
+        exit(0);
+    }
+
+    if (signum == SIGALRM) {
+        printf("received sigalrm\n");
+    }
+}
+
+void setup_signal_handler() {
+    struct sigaction sh;
+    sh.sa_handler = signal_handler;
+    if (sigaction(SIGINT, &sh, NULL) != 0) {
+        printf("Signal handling failed.\n");
+        exit(1);
+    }
+    sigaction(SIGINT, &sh, NULL);
+    
+    struct sigaction sh_alarm;   
+    sh_alarm.sa_handler = signal_handler;
+    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
+        exit(1);
+    }
+}
 
 void sort_jobs(Job jobs[], int count) {
     for (int i = 0; i < count; i++) {
@@ -70,11 +108,6 @@ void sort_jobs(Job jobs[], int count) {
         }
     }
 }
-
-void change_RR_flag(){
-    RR_flag = false;
-}
-
 
 char** break_spaces(char *str) {  
     char **command;
@@ -104,10 +137,7 @@ char** break_spaces(char *str) {
     return command;
 }
 
-void queue_command(){
-    char message[100];
-    read(fd, message, sizeof(message));
-    puts(message);
+void queue_command( char* message){
     char **command = break_spaces(message);
 
     int i = 0 , j = 0;
@@ -153,21 +183,6 @@ int queue_empty(){
 }
 
 
-void signal_handler(int signum) {
-
-    if (signum == SIGALRM) {
-        printf("received sigalrm\n");
-    }
-}
-
-void setup_signal_handler() {
-    struct sigaction sh_alarm;   
-    sh_alarm.sa_handler = signal_handler;
-    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
-        printf("Signal handling for SIGALRM failed.\n");
-        exit(1);
-    }
-}
 
 void round_robin(){
     //sort_queue();
@@ -221,7 +236,7 @@ void read_pipe(){
     close(fifo_fd);
 
     if (bytes_read > 0) {
-        puts(command);
+        queue_command( command );
     }
 }
 
@@ -229,51 +244,35 @@ int main(int argc, char const *argv[])
 {
     printf("Round Robin started\n");
     setup_signal_handler();
-    while (1)
-    {
+
+    NCPU = atoi(argv[1]);
+    TSLICE = atoi(argv[2]);
+
+    struct sigevent sev;
+    sev.sigev_notify = SIGEV_SIGNAL; // tells that event should be notified using a signal
+    sev.sigev_signo = SIGALRM; //tells that SIGALRM should be used
+    sev.sigev_value.sival_ptr = &timerid;
+
+    // Create a timer
+    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
+        perror("timer_create");
+        exit(1);
+    }
+
+    // Configure the initial timer expiration and interval
+    timer_spec.it_value.tv_sec = TSLICE / 1000;
+    timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
+    timer_spec.it_interval.tv_sec = 0;
+    timer_spec.it_interval.tv_nsec = 0;
+    while ( true )
+    {   
         read_pipe();
     }
-    
-    
-    // NCPU = atoi(argv[1]);
-    // TSLICE = atoi(argv[2]);
-
-
-    // mkfifo("fifo_pipe", 0666);
-    // fd = open("fifo_pipe", O_RDONLY); 
-      
-
-    // struct sigevent sev;
-    // sev.sigev_notify = SIGEV_SIGNAL; // tells that event should be notified using a signal
-    // sev.sigev_signo = SIGALRM; //tells that SIGALRM should be used
-    // sev.sigev_value.sival_ptr = &timerid;
-
-    // // Create a timer
-    // if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
-    //     perror("timer_create");
-    //     exit(1);
-    // }
-
-    // // Configure the initial timer expiration and interval
-    // timer_spec.it_value.tv_sec = TSLICE / 1000;
-    // timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
-    // timer_spec.it_interval.tv_sec = 0;
-    // timer_spec.it_interval.tv_nsec = 0;
-
-    
-
-    // while (RR_flag)
-    // {
-    //     if (!queue_empty())
-    //     {
-    //         round_robin();
-    //     }
-    // }
-    // printf("Scheduler exited\n");
-    // if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
-    //     perror("timer_settime");
-    //     exit(1);
-    // }
+    printf("Scheduler exited\n");
+    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
+        perror("timer_settime");
+        exit(1);
+    }
 
     return 0;
 }
