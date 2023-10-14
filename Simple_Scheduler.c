@@ -31,14 +31,59 @@ typedef struct {
 Job queue[200];
 struct itimerspec timer_spec; 
 timer_t timerid;
+void signal_handler(int signum) { 
+    if (signum == SIGINT) {
+        printf("\n---------------------------------\n");
+        //display_history();
+        exit(0);
+    }
 
+    else if (signum == SIGALRM) {
+        printf("received sigalrm\n");
+        return;
+    }
+}
 
 int queue_empty(){
     return front == rear;
 
 }
+void set_round_robin_timer() {
+    struct sigevent sev; // to tell how the timer will expire
+    sev.sigev_notify = SIGEV_SIGNAL;// to tell the signal will be sent through a signal which is SIGALRM
+    sev.sigev_signo = SIGALRM;
+    sev.sigev_value.sival_ptr = &timerid;
+
+    // Create a timer
+    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
+        perror("timer_create");
+        exit(1);
+    }
+
+    // Configure the initial timer expiration and interval
+    timer_spec.it_value.tv_sec = TSLICE / 1000;
+    timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
+    timer_spec.it_interval.tv_sec = 0;
+    timer_spec.it_interval.tv_nsec = 0;
+
+    // starts the timer
+    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
+        perror("timer_settime");
+        exit(1);
+    }
+}
+
+void print_queue(){
+    printf("front: %d , rear: %d\n" ,front , rear );
+    for (int i = front; i < rear; i++)
+    {
+        printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
+    }
+    
+}
 
 void round_robin(){
+
     //sort_queue();
     
     int cpu_counter = 0;
@@ -46,16 +91,18 @@ void round_robin(){
     int pid;
 
     while (cpu_counter != NCPU && !queue_empty()) {
-        pid = queue[front++].pid;
-        kill(pid, SIGCONT);
+        kill(queue[front++].pid, SIGCONT);
         cpu_counter++;
     }
+    printf("timer running\n");
+    set_round_robin_timer();
 
-    sigset_t mask;
+    sigset_t mask;//masks the signal to handle the timer expiration
     sigemptyset(&mask);
     sigaddset(&mask, SIGALRM);
 
-    if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
+    // Use sigtimedwait to handle the timer expiration event
+    if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {//blocks until the timer expires
         if (errno == EAGAIN) {
             // The timer expired
         } else {
@@ -63,23 +110,21 @@ void round_robin(){
             exit(1);
         }
     }
-
-    printf("timer running\n");
-
     int status;
     int i = 0;
 
     while (i < cpu_counter) { 
-        
-        pid = queue[old_head].pid;
-        kill(pid, SIGSTOP);
-        waitpid(pid, &status, WNOHANG);
+        kill(queue[old_head].pid, SIGSTOP);
+        waitpid(queue[old_head].pid, &status, WNOHANG);
 
         if (!WIFEXITED(status)) {
             queue[rear++] = queue[old_head];
         }
+        else{
+            printf("process finished\n");
+        }
         old_head++;
-        i++;
+        i++;    
     }
 }
 
@@ -115,19 +160,6 @@ void display_history() {
         printf("Start_Time: %ld\n", time_history[i][0]);
         printf("End_Time: %ld\n", time_history[i][1]);
         printf("-------------------------------\n");
-    }
-}
-
-void signal_handler(int signum) { 
-    if (signum == SIGINT) {
-        printf("\n---------------------------------\n");
-        display_history();
-        exit(0);
-    }
-
-    else if (signum == SIGALRM) {
-        printf("received sigalrm\n");
-        return;
     }
 }
 
@@ -234,16 +266,17 @@ void queue_command( char* message){
         printf("Command failed.\n");
         exit(1);
 
-    } else { 
+    } else {
+        kill(pid, SIGSTOP);
         queue[rear++].pid = pid;
         //puts(job.command[0]);
-        kill(pid, SIGSTOP);
+        
     }   
     
 }
 
 void read_pipe(){
-    const char* fifoName = "/tmp/__simplescheduler_fifo";
+    const char* fifoName = "/tmp/simplescheduler_fifo";
     int fifo_fd = open(fifoName, O_RDONLY);
 
     char command[256];
@@ -258,42 +291,57 @@ void read_pipe(){
     }
 }
 
+char* Input(){   // to take input from user , returns the string entered
+    char *input_str = (char*)malloc(100);
+    if (input_str == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1); 
+    }
+    flag_for_Input = false;
+    fgets(input_str ,100, stdin);
+    
+    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
+    {   
+        
+        flag_for_Input = true;
+    }
+    return input_str;
+}
+
 int main(int argc, char const *argv[])
 {
+    
 
     printf("Round Robin started\n");
     setup_signal_handler();
 
-    NCPU = atoi(argv[1]);
-    TSLICE = atoi(argv[2]);
+    NCPU = 2;//atoi(argv[1]);
+    TSLICE = 600;//atoi(argv[2]);
 
-    struct sigevent sev;
-    sev.sigev_notify = SIGEV_SIGNAL; // tells that event should be notified using a signal
-    sev.sigev_signo = SIGALRM; //tells that SIGALRM should be used
-    sev.sigev_value.sival_ptr = &timerid;
-
-    // Create a timer
-    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
-        perror("timer_create");
-        exit(1);
-    }
-
-    // Configure the initial timer expiration and interval
-    timer_spec.it_value.tv_sec = TSLICE / 1000;
-    timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
-    timer_spec.it_interval.tv_sec = 0;
-    timer_spec.it_interval.tv_nsec = 0;
     
     printf("Scheduler exited\n");
-
-    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
-        perror("timer_settime");
-        exit(1);
-    }
-    while (true)
+    char *str = Input();
+    queue_command(str);
+    str = Input();
+    queue_command(str);
+    str = Input();
+    queue_command(str);
+    str = Input();
+    queue_command(str);
+    sleep(2);
+    while (!queue_empty())
     {
-        read_pipe();
-
+        round_robin();
     }
+    
+    // while (true)
+    // {
+    //     read_pipe();
+
+    // }
+    
+    
+
+    
     return 0;
 }

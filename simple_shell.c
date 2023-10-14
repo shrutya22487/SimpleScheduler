@@ -358,7 +358,7 @@ void run_scheduler(){
 
 void send_message( char *command){
 
-    const char* fifoName = "/tmp/__simplescheduler_fifo";
+    const char* fifoName = "/tmp/simplescheduler_fifo";
     if (mkfifo(fifoName, 0666) == -1) {
         perror("mkfifo");
         exit(1);
