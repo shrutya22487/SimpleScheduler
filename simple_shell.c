@@ -55,9 +55,16 @@ void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
+        sleep(1);
         kill( scheduler_pid , SIGINT );
         exit(0);
     }
+    else if ( signum == SIGQUIT ) 
+    {   
+        printf("Starting Scheduler\n");
+        kill(scheduler_pid , SIGQUIT);
+    }
+    
 }
 
 void setup_signal_handler() {
@@ -68,6 +75,11 @@ void setup_signal_handler() {
         exit(1);
     }
     sigaction(SIGINT, &sh, NULL);
+    if (sigaction(SIGQUIT, &sh, NULL) != 0) {
+        printf("Signal handling failed.\n");
+        exit(1);
+    }
+    sigaction(SIGQUIT, &sh, NULL);
 }
 
 bool newline_checker( char* line  , int len){

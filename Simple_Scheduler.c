@@ -32,6 +32,57 @@ Job queue[200];
 struct itimerspec timer_spec; 
 timer_t timerid;
 
+
+int queue_empty(){
+    return front == rear;
+
+}
+
+void round_robin(){
+    //sort_queue();
+    
+    int cpu_counter = 0;
+    int old_head = front;
+    int pid;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        pid = queue[front++].pid;
+        kill(pid, SIGCONT);
+        cpu_counter++;
+    }
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGALRM);
+
+    if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
+        if (errno == EAGAIN) {
+            // The timer expired
+        } else {
+            perror("sigtimedwait");
+            exit(1);
+        }
+    }
+
+    printf("timer running\n");
+
+    int status;
+    int i = 0;
+
+    while (i < cpu_counter) { 
+        
+        pid = queue[old_head].pid;
+        kill(pid, SIGSTOP);
+        waitpid(pid, &status, WNOHANG);
+
+        if (!WIFEXITED(status)) {
+            queue[rear++] = queue[old_head];
+        }
+        old_head++;
+        i++;
+    }
+}
+
 void stableSelectionSort(Job arr[], int n) {
     int i, j, minIndex;
     Job temp;
@@ -74,20 +125,35 @@ void signal_handler(int signum) {
         exit(0);
     }
 
-    if (signum == SIGALRM) {
+    else if (signum == SIGALRM) {
         printf("received sigalrm\n");
+        return;
+    }
+}
+
+void sigquit_handler( int signum ){
+    if ( signum == SIGQUIT ) 
+    {   
+        printf("got siquit\n");
+        while (!queue_empty())
+        {
+            round_robin();
+        }
+        printf("queue is empty now\n");
+        return;
     }
 }
 
 void setup_signal_handler() {
-    struct sigaction sh;
-    sh.sa_handler = signal_handler;
-    if (sigaction(SIGINT, &sh, NULL) != 0) {
-        printf("Signal handling failed.\n");
-        exit(1);
-    }
-    sigaction(SIGINT, &sh, NULL);
-    
+    struct sigaction sh_int, sh_quit;
+    memset(&sh_int, 0, sizeof(sh_int));
+    sh_int.sa_handler = signal_handler;
+    sigaction(SIGINT, &sh_int, NULL); // Register handler for SIGINT
+
+    memset(&sh_quit, 0, sizeof(sh_quit));
+    sh_quit.sa_handler = sigquit_handler;
+    sigaction(SIGQUIT, &sh_quit, NULL); // Register handler for SIGQUIT
+   
     struct sigaction sh_alarm;   
     sh_alarm.sa_handler = signal_handler;
     if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
@@ -139,7 +205,6 @@ char** break_spaces(char *str) {
 
 void queue_command( char* message){
     char **command = break_spaces(message);
-
     int i = 0 , j = 0;
     while (command[i] != NULL)
     {
@@ -150,7 +215,6 @@ void queue_command( char* message){
     job.command = (char**)malloc(sizeof(char*));
     job.command[0] = (char*)malloc(sizeof(char)*100);
     job.command[0] = command[1];
-
     if (i == 3)
     {
         job.priority = atoi(command[2]);
@@ -159,70 +223,23 @@ void queue_command( char* message){
         job.priority = 1;
     }
     queue[rear] = job;
-    
     int pid = fork();
 
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
-    } else if (pid == 0) {
+    } 
+    else if (pid == 0) {
         execvp( job.command[0] , job.command );
         printf("Command failed.\n");
         exit(1);
 
     } else { 
         queue[rear++].pid = pid;
+        //puts(job.command[0]);
         kill(pid, SIGSTOP);
     }   
     
-}
-
-int queue_empty(){
-    return front == rear;
-
-}
-
-
-
-void round_robin(){
-    //sort_queue();
-    
-    int cpu_counter = 0;
-    int old_head = front;
-    pid_t pid;
-
-    while (cpu_counter != NCPU && !queue_empty()) {
-        pid = queue[front++].pid;
-        kill(pid, SIGCONT);
-        cpu_counter++;
-    }
-    sigset_t mask;
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGALRM);
-    if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {
-        if (errno == EAGAIN) {
-            // The timer expired
-        } else {
-            perror("sigtimedwait");
-            exit(1);
-        }
-    }
-
-    printf("timer running\n");
-
-    int status;
-    int i = 0;
-
-    while (i < cpu_counter) { 
-        pid = queue[old_head].pid;
-        kill(pid, SIGSTOP);
-        waitpid(pid, &status, WNOHANG);
-
-        if (!WIFEXITED(status)) {
-            queue[rear++] = queue[old_head++];
-        }
-        i++;
-    }
 }
 
 void read_pipe(){
@@ -236,12 +253,14 @@ void read_pipe(){
     close(fifo_fd);
 
     if (bytes_read > 0) {
+        //puts(command);
         queue_command( command );
     }
 }
 
 int main(int argc, char const *argv[])
 {
+
     printf("Round Robin started\n");
     setup_signal_handler();
 
@@ -264,15 +283,17 @@ int main(int argc, char const *argv[])
     timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
     timer_spec.it_interval.tv_sec = 0;
     timer_spec.it_interval.tv_nsec = 0;
-    while ( true )
-    {   
-        read_pipe();
-    }
+    
     printf("Scheduler exited\n");
+
     if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
         perror("timer_settime");
         exit(1);
     }
+    while (true)
+    {
+        read_pipe();
 
+    }
     return 0;
 }
