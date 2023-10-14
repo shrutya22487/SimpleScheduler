@@ -155,32 +155,18 @@ int queue_empty(){
 
 void signal_handler(int signum) {
 
-    // if (signum == SIGALRM) {
-    //     printf("received sigalrm\n");
-    // }
-    if (signum == SIGUSR1)
-    {   
-        printf("\ncaught sigusr1\n");
-        //queue_command();
-        exit(0);
+    if (signum == SIGALRM) {
+        printf("received sigalrm\n");
     }
 }
 
 void setup_signal_handler() {
-    // struct sigaction sh_alarm;   
-    // sh_alarm.sa_handler = signal_handler;
-    // if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
-    //     printf("Signal handling for SIGALRM failed.\n");
-    //     exit(1);
-    // }
-
-    struct sigaction sh;
-    sh.sa_handler = signal_handler;
-    if (sigaction(SIGUSR1, &sh, NULL) != 0) {
-        printf("Signal handling failed.\n");
+    struct sigaction sh_alarm;   
+    sh_alarm.sa_handler = signal_handler;
+    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
         exit(1);
     }
-    sigaction(SIGUSR1, &sh, NULL);
 }
 
 void round_robin(){
@@ -224,14 +210,33 @@ void round_robin(){
     }
 }
 
+void read_pipe(){
+    const char* fifoName = "/tmp/__simplescheduler_fifo";
+    int fifo_fd = open(fifoName, O_RDONLY);
+
+    char command[256];
+    ssize_t bytes_read;
+
+    bytes_read = read(fifo_fd, command, sizeof(command));
+    close(fifo_fd);
+
+    if (bytes_read > 0) {
+        puts(command);
+    }
+}
 
 int main(int argc, char const *argv[])
 {
-    setup_signal_handler();
-
     printf("Round Robin started\n");
-    //NCPU = atoi(argv[1]);
-    //TSLICE = atoi(argv[2]);
+    setup_signal_handler();
+    while (1)
+    {
+        read_pipe();
+    }
+    
+    
+    // NCPU = atoi(argv[1]);
+    // TSLICE = atoi(argv[2]);
 
 
     // mkfifo("fifo_pipe", 0666);
@@ -270,8 +275,5 @@ int main(int argc, char const *argv[])
     //     exit(1);
     // }
 
-    // close(fd);
-
-    // unlink("fifo_pipe");
     return 0;
 }

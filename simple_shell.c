@@ -35,6 +35,7 @@ int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
 int count_history = 0 , ncpu , tslice , fd , scheduler_pid ;
+char message_str[256];
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -346,20 +347,27 @@ void run_scheduler(){
         exit(1);
 
     } else {
-        sleep(2);
         scheduler_pid = pid;
-        kill(pid , SIGUSR1);
-
-        printf("Scheduler has started now\n");
     }
 
 
 }
 
 void send_message( char *command){
-    write(fd, command, strlen(command) + 1);
-    printf("Message sent through FIFO.\n");
 
+    const char* fifoName = "/tmp/__simplescheduler_fifo";
+    if (mkfifo(fifoName, 0666) == -1) {
+        perror("mkfifo");
+        exit(1);
+    }
+    int fifo_fd = open(fifoName, O_WRONLY);
+    if (fifo_fd == -1) {
+        perror("open");
+        exit(1);
+    }
+    write(fifo_fd, command, strlen(command) + 1);
+    close(fifo_fd);
+    unlink(fifoName);
 }
 
 int main(int argc, char const *argv[]) {
@@ -371,27 +379,21 @@ int main(int argc, char const *argv[]) {
     }
     ncpu = atoi(argv[1]);
     tslice = atoi( argv [2]);
-
-    // mkfifo("fifo_pipe", 0666);
-    // fd = open("fifo_pipe", O_WRONLY); 
-
     setup_signal_handler(); 
     run_scheduler();   
-    printf("%d \n" , scheduler_pid);
     char *str, *str_for_history = (char *)malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
         exit(1);
     }
-    kill( scheduler_pid , SIGUSR1);
-     
     char c[100]; // to print the current directory
     printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
 
     while (1) {
         getcwd(c, sizeof(c));
         printf("Shell> %s>>> ", c);
-        str = Input(); 
+        str = Input();
+        strcpy(message_str , str);
         if (flag_for_Input == true) {
             strcpy(str_for_history, str);
             start_time = get_time();
@@ -407,13 +409,11 @@ int main(int argc, char const *argv[]) {
                     char ***command_2 = break_pipes_2(command_1);
                     executePipe(command_2);
                 } else {
+                    
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {   
-
-        
-                        //send_message(str);
-                        printf("%d\n",kill( scheduler_pid , SIGUSR1)); 
+                        send_message(message_str); 
                     }
                     else
                     {
@@ -423,7 +423,7 @@ int main(int argc, char const *argv[]) {
                 }
             }
 
-            count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
+            //count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
         }
     }
 
