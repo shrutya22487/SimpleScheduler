@@ -83,9 +83,7 @@ void print_queue(){
 }
 
 void round_robin(){
-
     //sort_queue();
-    
     int cpu_counter = 0;
     int old_head = front;
     int pid;
@@ -163,10 +161,10 @@ void display_history() {
     }
 }
 
-void sigquit_handler( int signum ){
-    if ( signum == SIGQUIT ) 
+void sigusr_handler( int signum ){
+    if ( signum == SIGUSR1 ) 
     {   
-        printf("got siquit\n");
+        printf("got sigusr1\n");
         while (!queue_empty())
         {
             round_robin();
@@ -177,14 +175,14 @@ void sigquit_handler( int signum ){
 }
 
 void setup_signal_handler() {
-    struct sigaction sh_int, sh_quit;
+    struct sigaction sh_int, sh_usr1;
     memset(&sh_int, 0, sizeof(sh_int));
     sh_int.sa_handler = signal_handler;
     sigaction(SIGINT, &sh_int, NULL); // Register handler for SIGINT
 
-    memset(&sh_quit, 0, sizeof(sh_quit));
-    sh_quit.sa_handler = sigquit_handler;
-    sigaction(SIGQUIT, &sh_quit, NULL); // Register handler for SIGQUIT
+    memset(&sh_usr1, 0, sizeof(sh_usr1));
+    sh_usr1.sa_handler = sigusr_handler;
+    sigaction(SIGUSR1, &sh_usr1, NULL); // Register handler for SIGQUIT
    
     struct sigaction sh_alarm;   
     sh_alarm.sa_handler = signal_handler;
@@ -286,8 +284,9 @@ void read_pipe(){
     close(fifo_fd);
 
     if (bytes_read > 0) {
-        //puts(command);
         queue_command( command );
+
+        print_queue();
     }
 }
 
@@ -310,38 +309,15 @@ char* Input(){   // to take input from user , returns the string entered
 
 int main(int argc, char const *argv[])
 {
-    
-
     printf("Round Robin started\n");
     setup_signal_handler();
+    NCPU = atoi(argv[1]);
+    TSLICE = atoi(argv[2]);
 
-    NCPU = 2;//atoi(argv[1]);
-    TSLICE = 600;//atoi(argv[2]);
-
-    
-    printf("Scheduler exited\n");
-    char *str = Input();
-    queue_command(str);
-    str = Input();
-    queue_command(str);
-    str = Input();
-    queue_command(str);
-    str = Input();
-    queue_command(str);
-    sleep(2);
-    while (!queue_empty())
+    while (true)
     {
-        round_robin();
+        read_pipe();
+
     }
-    
-    // while (true)
-    // {
-    //     read_pipe();
-
-    // }
-    
-    
-
-    
     return 0;
 }

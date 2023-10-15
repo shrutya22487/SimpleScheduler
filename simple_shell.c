@@ -59,11 +59,6 @@ void signal_handler(int signum) {
         kill( scheduler_pid , SIGINT );
         exit(0);
     }
-    else if ( signum == SIGQUIT ) 
-    {   
-        printf("Starting Scheduler\n");
-        kill(scheduler_pid , SIGQUIT);
-    }
     
 }
 
@@ -75,11 +70,6 @@ void setup_signal_handler() {
         exit(1);
     }
     sigaction(SIGINT, &sh, NULL);
-    if (sigaction(SIGQUIT, &sh, NULL) != 0) {
-        printf("Signal handling failed.\n");
-        exit(1);
-    }
-    sigaction(SIGQUIT, &sh, NULL);
 }
 
 bool newline_checker( char* line  , int len){
@@ -108,7 +98,7 @@ void executeCommand(char** argv) {
 
         if (and_flag) signal(SIGHUP, SIG_IGN);
 
-        execvp(argv[0], argv); 
+        execvp(argv[0], argv);
         printf("Command failed.\n");
         exit(1);
     }
@@ -397,7 +387,14 @@ int main(int argc, char const *argv[]) {
         printf("Shell> %s>>> ", c);
         str = Input();
         strcpy(message_str , str);
-        if (flag_for_Input == true) {
+        if ( !strcmp( "run\n" , str ) )
+        {
+            printf("MEOW\n");
+            kill( scheduler_pid , SIGUSR1 );
+            continue;
+        }
+        
+        else if (flag_for_Input == true) {
             strcpy(str_for_history, str);
             start_time = get_time();
 
