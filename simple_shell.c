@@ -55,7 +55,7 @@ void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
-        sleep(1);
+        sleep(2);
         kill( scheduler_pid , SIGINT );
         exit(0);
     }
@@ -389,7 +389,6 @@ int main(int argc, char const *argv[]) {
         strcpy(message_str , str);
         if ( !strcmp( "run\n" , str ) )
         {
-            printf("MEOW\n");
             kill( scheduler_pid , SIGUSR1 );
             continue;
         }

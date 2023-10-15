@@ -12,65 +12,75 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-int front= 0 , rear = 0 , NCPU , TSLICE , count_jobs , fd;
+int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head;
 char history[100][100];
 int pid_history[100],  child_pid;
-long time_history[100][2],start_time;
+long time_history[100][2],start_time , wait_history[100];
 bool flag_for_Input = true;
 int count_history = 0;
 char message_str[256];
 
 typedef struct {
-    int pid;
-    char** command;
-    int priority; 
-    long start_time;
-    long end_time;
-} Job;
+    int pid , priority;
+    char** command; 
+    long start_time , end_time , wait_time;
+    int start_flag;
+} Submit;
 
-Job queue[200];
+long get_time(){
+    struct timeval time, *address_time = &time;
+    if (gettimeofday(address_time, NULL) != 0) {
+        printf("Error in getting the time.\n");
+        exit(1);
+    }
+    long epoch_time = time.tv_sec * 1000;
+    return epoch_time + time.tv_usec / 1000;
+}
+
+void add_to_history(char *command, int pid, long start_time_ms, long end_time_ms , long wait_time) {
+    strcpy(history[count_history], command);
+    pid_history[count_history] = pid;
+    time_history[count_history][0] = start_time_ms;
+    time_history[count_history][1] = end_time_ms;
+    wait_history[count_history] = wait_time;
+    count_history++;
+}
+
+void display_history() {
+    printf("-------------------------------\n");
+    printf("\n Command History for Scheduler: \n");
+    printf("-------------------------------\n");
+
+    for (int i = 0; i < count_history; i++) {
+        printf("Command: %s\n", history[i]);
+        printf("PID: %d\n", pid_history[i]);
+        printf("Execution Time: %ld\n", time_history[i][1] - time_history[i][0]);
+        printf("Wait Time: %ld\n", wait_history[i]);
+        printf("-------------------------------\n");
+    }
+
+    //calculating averages
+    long avg_waiting = 0 , avg_execution = 0;
+    for (int i = 0; i < count_history; i++)
+    {
+        avg_execution += time_history[i][1] - time_history[i][0];
+        avg_waiting += wait_history[i]; 
+    }
+    avg_execution /= count_history;
+    avg_waiting /= count_history; 
+    printf("Average execution Time: %ld\n\n", avg_execution);
+    printf("Average Waiting Time: %ld\n", avg_waiting);
+    printf("-------------------------------\n");
+}
+
+
+Submit queue[200];
 struct itimerspec timer_spec; 
 timer_t timerid;
-void signal_handler(int signum) { 
-    if (signum == SIGINT) {
-        printf("\n---------------------------------\n");
-        //display_history();
-        exit(0);
-    }
-
-    else if (signum == SIGALRM) {
-        printf("received sigalrm\n");
-        return;
-    }
-}
 
 int queue_empty(){
     return front == rear;
 
-}
-void set_round_robin_timer() {
-    struct sigevent sev; // to tell how the timer will expire
-    sev.sigev_notify = SIGEV_SIGNAL;// to tell the signal will be sent through a signal which is SIGALRM
-    sev.sigev_signo = SIGALRM;
-    sev.sigev_value.sival_ptr = &timerid;
-
-    // Create a timer
-    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
-        perror("timer_create");
-        exit(1);
-    }
-
-    // Configure the initial timer expiration and interval
-    timer_spec.it_value.tv_sec = TSLICE / 1000;
-    timer_spec.it_value.tv_nsec = (TSLICE % 1000) * 1000000;
-    timer_spec.it_interval.tv_sec = 0;
-    timer_spec.it_interval.tv_nsec = 0;
-
-    // starts the timer
-    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
-        perror("timer_settime");
-        exit(1);
-    }
 }
 
 void print_queue(){
@@ -82,53 +92,117 @@ void print_queue(){
     
 }
 
-void round_robin(){
-    //sort_queue();
-    int cpu_counter = 0;
-    int old_head = front;
-    int pid;
-
-    while (cpu_counter != NCPU && !queue_empty()) {
-        kill(queue[front++].pid, SIGCONT);
-        cpu_counter++;
-    }
-    printf("timer running\n");
-    set_round_robin_timer();
-
-    sigset_t mask;//masks the signal to handle the timer expiration
-    sigemptyset(&mask);
-    sigaddset(&mask, SIGALRM);
-
-    // Use sigtimedwait to handle the timer expiration event
-    if (sigtimedwait(&mask, NULL, &timer_spec.it_value) == -1) {//blocks until the timer expires
-        if (errno == EAGAIN) {
-            // The timer expired
-        } else {
-            perror("sigtimedwait");
-            exit(1);
+int find_submit(int pid){
+    for (int i = 0; i < count_history; i++)
+    {
+        if (pid == pid_history[i])
+        {
+            return i;
         }
+        
     }
-    int status;
-    int i = 0;
+    
+}
 
+void add_waittime( ){
+    for (int i = cpu_counter + front ; i < rear; i++)
+    {
+        
+        queue[i].wait_time += TSLICE;
+    }
+}
+
+void stop_processes(){
+
+    int status , i = 0;
     while (i < cpu_counter) { 
-        kill(queue[old_head].pid, SIGSTOP);
-        waitpid(queue[old_head].pid, &status, WNOHANG);
+        int pid = queue[old_head].pid;
+        kill(pid, SIGSTOP);
+        //printf("stopping process with pid :%d\n" , pid );
+
+        waitpid(pid, &status, WNOHANG);
 
         if (!WIFEXITED(status)) {
             queue[rear++] = queue[old_head];
         }
         else{
-            printf("process finished\n");
+            queue[old_head].end_time = get_time();
+            Submit submit = queue[old_head];
+            add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
+            sleep(1);
         }
         old_head++;
         i++;    
     }
+
 }
 
-void stableSelectionSort(Job arr[], int n) {
+void signal_handler(int signum) { 
+    if (signum == SIGINT) {
+        printf("\n---------------------------------\n");
+        display_history();
+        exit(0);
+    }
+
+    else if (signum == SIGALRM) {
+        //printf("received sigalrm\n");
+        stop_processes();
+        return;
+    }
+}
+
+void set_round_robin_timer() {
+    struct itimerval val;
+    struct sigaction action;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    action.sa_handler = signal_handler;
+
+    if (sigaction(SIGALRM, &action, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+    val.it_value.tv_sec = TSLICE / 1000;
+    val.it_value.tv_usec = (TSLICE % 1000) * 1000;
+    val.it_interval.tv_sec = 0;
+    val.it_interval.tv_usec = 0;
+
+    if (setitimer(ITIMER_REAL, &val, NULL) == -1) {
+        perror("setitimer");
+        exit(1);
+    }
+}
+
+void round_robin(){
+    //sort_queue();
+    cpu_counter = 0;
+    old_head = front;
+    int pid ;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        kill(queue[front].pid, SIGCONT);
+        //printf("continuing process with pid :%d\n" ,queue[front].pid );
+
+        if ( !queue[front].start_flag )
+        {
+            queue[front].start_flag = 1;
+            queue[front].start_time = get_time();
+        }
+        cpu_counter++;
+        front++;
+    }
+
+    add_waittime();
+    sleep(1);
+    printf("timer running\n");
+    set_round_robin_timer();
+    sleep(1);
+    
+}
+
+void stableSelectionSort(Submit arr[], int n) {
     int i, j, minIndex;
-    Job temp;
+    Submit temp;
 
     for (i = 0; i < n - 1; i++) {
         minIndex = i;
@@ -147,29 +221,12 @@ void stableSelectionSort(Job arr[], int n) {
     }
 }
 
-void display_history() {
-    printf("-------------------------------\n");
-    printf("\n Command History: for scheduler \n");
-    printf("-------------------------------\n");
-
-    for (int i = 0; i < count_history; i++) {
-        printf("Command: %s\n", history[i]);
-        printf("PID: %d\n", pid_history[i]);
-        printf("Start_Time: %ld\n", time_history[i][0]);
-        printf("End_Time: %ld\n", time_history[i][1]);
-        printf("-------------------------------\n");
-    }
-}
-
 void sigusr_handler( int signum ){
     if ( signum == SIGUSR1 ) 
-    {   
-        printf("got sigusr1\n");
-        while (!queue_empty())
+    {   while (!queue_empty())
         {
             round_robin();
         }
-        printf("queue is empty now\n");
         return;
     }
 }
@@ -192,14 +249,14 @@ void setup_signal_handler() {
     }
 }
 
-void sort_jobs(Job jobs[], int count) {
+void sort_Submits(Submit Submits[], int count) {
     for (int i = 0; i < count; i++) {
         for (int j = 0; j < count - i - 1; j++) {
-            if (jobs[j].priority > jobs[j + 1].priority) {
-                // Swap jobs[j] and jobs[j+1]
-                Job temp = jobs[j];
-                jobs[j] = jobs[j + 1];
-                jobs[j + 1] = temp;
+            if (Submits[j].priority > Submits[j + 1].priority) {
+                // Swap Submits[j] and Submits[j+1]
+                Submit temp = Submits[j];
+                Submits[j] = Submits[j + 1];
+                Submits[j + 1] = temp;
             }
         }
     }
@@ -241,34 +298,38 @@ void queue_command( char* message){
         i++;
     }
 
-    Job job;
-    job.command = (char**)malloc(sizeof(char*));
-    job.command[0] = (char*)malloc(sizeof(char)*100);
-    job.command[0] = command[1];
+    Submit submit;
+    submit.command = (char**)malloc(sizeof(char*));
+    submit.command[0] = (char*)malloc(sizeof(char)*100);
+    submit.command[0] = command[1];
     if (i == 3)
     {
-        job.priority = atoi(command[2]);
+        submit.priority = atoi(command[2]);
     }
     else{
-        job.priority = 1;
+        submit.priority = 1;
     }
-    queue[rear] = job;
-    int pid = fork();
+    submit.start_time = 0;
+    submit.end_time = 0;
+    submit.wait_time = 0;
+    submit.start_flag = 0;
+    queue[rear] = submit;
 
+    int pid = fork();
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
     } 
     else if (pid == 0) {
-        execvp( job.command[0] , job.command );
+        execvp( submit.command[0] , submit.command );
         printf("Command failed.\n");
         exit(1);
 
     } else {
         kill(pid, SIGSTOP);
-        queue[rear++].pid = pid;
-        //puts(job.command[0]);
-        
+        queue[rear].pid = pid;
+        //add_to_history( queue[rear].command[0] , queue[rear].pid , get_time(), 0);        
+        rear++;
     }   
     
 }
@@ -285,8 +346,7 @@ void read_pipe(){
 
     if (bytes_read > 0) {
         queue_command( command );
-
-        print_queue();
+        //print_queue();
     }
 }
 

@@ -10,7 +10,7 @@ int fib(int n) {
 
 int main(int argc, char const *argv[])
 {
-  int val = fib(40);
+  int val = fib(4 0);
   printf("fib value  ==  %d \n", val);
   return 0;
 }
