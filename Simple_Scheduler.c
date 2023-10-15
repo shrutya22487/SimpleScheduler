@@ -12,20 +12,42 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head;
-char history[100][100];
-int pid_history[100],  child_pid;
-long time_history[100][2],start_time , wait_history[100];
-bool flag_for_Input = true;
-int count_history = 0;
-char message_str[256];
-
 typedef struct {
-    int pid , priority;
+    int pid , priority , start_flag;;
     char** command; 
     long start_time , end_time , wait_time;
-    int start_flag;
 } Submit;
+
+int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head , count_history = 0 , pid_history[100],  child_pid , pipe_fd;
+char history[100][100] , message_str[256];
+long time_history[100][2], start_time , wait_history[100];
+bool flag_for_Input = true;
+Submit queue[200];
+struct itimerspec timer_spec; 
+timer_t timerid;
+
+void swap(Submit* a, Submit* b) {
+    Submit temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void sort_queue() {
+    int swapped;
+    for (int i = front; i < rear; i++) {
+        swapped = 0;
+        for (int j = front; j < rear - 1; j++) {
+            if (queue[j].priority > queue[j + 1].priority) {
+                swap(&queue[j], &queue[j + 1]);
+                swapped = 1;
+            }
+        }
+        if (swapped == 0) {
+            break;
+        }
+    }
+}
+
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -73,11 +95,6 @@ void display_history() {
     printf("-------------------------------\n");
 }
 
-
-Submit queue[200];
-struct itimerspec timer_spec; 
-timer_t timerid;
-
 int queue_empty(){
     return front == rear;
 
@@ -88,18 +105,6 @@ void print_queue(){
     for (int i = front; i < rear; i++)
     {
         printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
-    }
-    
-}
-
-int find_submit(int pid){
-    for (int i = 0; i < count_history; i++)
-    {
-        if (pid == pid_history[i])
-        {
-            return i;
-        }
-        
     }
     
 }
@@ -173,9 +178,7 @@ void set_round_robin_timer() {
 }
 
 void round_robin(){
-    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
-
-    //sort_queue();
+    sort_queue();
     cpu_counter = 0;
     old_head = front;
     int pid ;
@@ -198,27 +201,6 @@ void round_robin(){
     
 }
 
-void stableSelectionSort(Submit arr[], int n) {
-    int i, j, minIndex;
-    Submit temp;
-
-    for (i = 0; i < n - 1; i++) {
-        minIndex = i;
-        for (j = i + 1; j < n; j++) {
-            if (arr[j].priority < arr[minIndex].priority || (arr[j].priority == arr[minIndex].priority && j < minIndex)) {
-                minIndex = j;
-            }
-        }
-
-        // Swap arr[i] and arr[minIndex]
-        temp = arr[minIndex];
-        for (j = minIndex; j > i; j--) {
-            arr[j] = arr[j - 1];
-        }
-        arr[i] = temp;
-    }
-}
-
 void sigusr_handler( int signum ){
     if ( signum == SIGUSR1 ) 
     {   while (!queue_empty())
@@ -233,30 +215,23 @@ void setup_signal_handler() {
     struct sigaction sh_int, sh_usr1;
     memset(&sh_int, 0, sizeof(sh_int));
     sh_int.sa_handler = signal_handler;
-    sigaction(SIGINT, &sh_int, NULL); // Register handler for SIGINT
-
+     // Register handler for SIGINT
+    if (sigaction(SIGINT, &sh_int, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
+        exit(1);
+    }
     memset(&sh_usr1, 0, sizeof(sh_usr1));
     sh_usr1.sa_handler = sigusr_handler;
-    sigaction(SIGUSR1, &sh_usr1, NULL); // Register handler for SIGQUIT
-   
+     // Register handler for SIGUSR1
+    if (sigaction(SIGUSR1, &sh_usr1, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
+        exit(1);
+    }
     struct sigaction sh_alarm;   
     sh_alarm.sa_handler = signal_handler;
     if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
         printf("Signal handling for SIGALRM failed.\n");
         exit(1);
-    }
-}
-
-void sort_Submits(Submit Submits[], int count) {
-    for (int i = 0; i < count; i++) {
-        for (int j = 0; j < count - i - 1; j++) {
-            if (Submits[j].priority > Submits[j + 1].priority) {
-                // Swap Submits[j] and Submits[j+1]
-                Submit temp = Submits[j];
-                Submits[j] = Submits[j + 1];
-                Submits[j + 1] = temp;
-            }
-        }
     }
 }
 
@@ -289,6 +264,7 @@ char** break_spaces(char *str) {
 }
 
 void queue_command( char* message){
+
     char **command = break_spaces(message);
     int i = 0 , j = 0;
     while (command[i] != NULL)
@@ -333,19 +309,18 @@ void queue_command( char* message){
 }
 
 void read_pipe(){
-    const char* fifoName = "/tmp/simplescheduler_fifo";
-    int fifo_fd = open(fifoName, O_RDONLY);
+    char* pipe_name = "/fifo";
+    pipe_fd= open(pipe_name, O_RDONLY);
 
-    char command[256];
-    ssize_t bytes_read;
+    char *buf = (char*)malloc(sizeof(char) * 256);
+        
 
-    bytes_read = read(fifo_fd, command, sizeof(command));
-    close(fifo_fd);
-
-    if (bytes_read > 0) {
-        queue_command( command );
+    if (read(pipe_fd, buf, sizeof( buf ))> 0) {
+        queue_command( buf );
         //print_queue();
     }
+    close(pipe_fd);
+    
 }
 
 char* Input(){   // to take input from user , returns the string entered

@@ -10,6 +10,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -26,7 +27,7 @@ char history[100][100];
 int pid_history[100],  child_pid;
 long time_history[100][2],start_time;
 bool flag_for_Input = true;
-int count_history = 0 , ncpu , tslice , fd , scheduler_pid ;
+int count_history = 0 , ncpu , tslice , fd , scheduler_pid  , pipe_fd;
 char message_str[256];
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
@@ -55,7 +56,7 @@ void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
-        sleep(2);
+        sleep(1);
         kill( scheduler_pid , SIGINT );
         exit(0);
     }
@@ -69,7 +70,6 @@ void setup_signal_handler() {
         printf("Signal handling failed.\n");
         exit(1);
     }
-    sigaction(SIGINT, &sh, NULL);
 }
 
 bool newline_checker( char* line  , int len){
@@ -322,15 +322,15 @@ void executeScript(char *filename) {
 }
 
 void run_scheduler(){   
-    char ncpu_str[10];
-    char tslice_str[10];
-    snprintf(ncpu_str, sizeof(ncpu_str), "%d", ncpu);
-    snprintf(tslice_str, sizeof(tslice_str), "%d", tslice);
+    char *n_str = (char*)malloc(sizeof(char)*  10);
+    char *t_str = (char*)malloc(sizeof(char)*  10);
+    snprintf(n_str, 10, "%d", ncpu);
+    snprintf(t_str, 10, "%d", tslice);
+
     char *p = "./Simple_Scheduler";
-    char *args[] = {"./Simple_Scheduler" , ncpu_str , tslice_str,  NULL};
+    char *args[] = {"./Simple_Scheduler" , n_str , t_str,  NULL};
     
     int pid = fork();
-
     if (pid< 0) {
         printf("Forking child failed.\n");
         exit(1);
@@ -338,29 +338,31 @@ void run_scheduler(){
         execvp( p , args );
         printf("Command failed.\n");
         exit(1);
-
     } else {
         scheduler_pid = pid;
     }
-
-
 }
 
 void send_message( char *command){
 
-    const char* fifoName = "/tmp/simplescheduler_fifo";
-    if (mkfifo(fifoName, 0666) == -1) {
-        perror("mkfifo");
+    char* pipe_name = "/fifo";
+    if (mkfifo(pipe_name, 0666) == -1) {// to make the pipe readable and writable by all
+        printf("Couldn't make pipe\n");
         exit(1);
     }
-    int fifo_fd = open(fifoName, O_WRONLY);
-    if (fifo_fd == -1) {
-        perror("open");
+    pipe_fd = open(pipe_name, O_WRONLY);
+
+    if (pipe_fd == -1) {
+        printf("couldn't open pipe\n");
         exit(1);
     }
-    write(fifo_fd, command, strlen(command) + 1);
-    close(fifo_fd);
-    unlink(fifoName);
+    int len = strlen(command);
+
+    write(pipe_fd, command, len + 1);
+
+    close(pipe_fd);
+
+    unlink(pipe_name);
 }
 
 int main(int argc, char const *argv[]) {
@@ -422,7 +424,7 @@ int main(int argc, char const *argv[]) {
                 }
             }
 
-            //count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
+            count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
         }
     }
 

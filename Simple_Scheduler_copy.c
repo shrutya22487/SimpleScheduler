@@ -1,19 +1,33 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/types.h>
+#include<sys/wait.h>
 #include <stdbool.h>
-#include <signal.h>
+#include <signal.h> 
 #include <sys/time.h>
 #include <time.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
 
-// Define constants for priority levels
-#define MIN_PRIORITY 1
-#define MAX_PRIORITY 100
+int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head;
+char history[100][100];
+int pid_history[100],  child_pid;
+long time_history[100][2],start_time , wait_history[100];
+bool flag_for_Input = true;
+int count_history = 0;
+char message_str[256];
 
-long get_time() {
+typedef struct {
+    int pid , priority;
+    char** command; 
+    long start_time , end_time , wait_time;
+    int start_flag;
+} Submit;
+
+long get_time(){
     struct timeval time, *address_time = &time;
     if (gettimeofday(address_time, NULL) != 0) {
         printf("Error in getting the time.\n");
@@ -23,247 +37,247 @@ long get_time() {
     return epoch_time + time.tv_usec / 1000;
 }
 
-char history[100][100];
-int pid_history[100], child_pid;
-long time_history[100][2], start_time;
-bool flag_for_Input = true;
-int count_history = 0, queue_head = 0, queue_tail = 0, NCPU, TSLICE;
-pid_t queue[100];
-
-typedef struct {
-    int pid;
-    char command[100];
-    int priority; // Priority of the job
-    long start_time;
-    long end_time;
-} Job;
-
-Job jobs[100]; // Array to store job information
-
-int add_to_history(char *command, int pid, int priority, long start_time_ms, long end_time_ms, int count_history) {
+void add_to_history(char *command, int pid, long start_time_ms, long end_time_ms , long wait_time) {
     strcpy(history[count_history], command);
     pid_history[count_history] = pid;
-    jobs[count_history].pid = pid;
-    jobs[count_history].priority = priority;
-    jobs[count_history].start_time = start_time_ms;
-    jobs[count_history].end_time = end_time_ms;
-    return ++count_history;
+    time_history[count_history][0] = start_time_ms;
+    time_history[count_history][1] = end_time_ms;
+    wait_history[count_history] = wait_time;
+    count_history++;
 }
 
 void display_history() {
     printf("-------------------------------\n");
-    printf("\n Command History: \n");
+    printf("\n Command History for Scheduler: \n");
     printf("-------------------------------\n");
 
     for (int i = 0; i < count_history; i++) {
         printf("Command: %s\n", history[i]);
         printf("PID: %d\n", pid_history[i]);
-        printf("Priority: %d\n", jobs[i].priority);
-        printf("Start_Time: %ld\n", jobs[i].start_time);
-        printf("End_Time: %ld\n", jobs[i].end_time);
+        printf("Execution Time: %ld\n", time_history[i][1] - time_history[i][0]);
+        printf("Wait Time: %ld\n", wait_history[i]);
         printf("-------------------------------\n");
+    }
+
+    //calculating averages
+    long avg_waiting = 0 , avg_execution = 0;
+    for (int i = 0; i < count_history; i++)
+    {
+        avg_execution += time_history[i][1] - time_history[i][0];
+        avg_waiting += wait_history[i]; 
+    }
+    avg_execution /= count_history;
+    avg_waiting /= count_history; 
+    printf("Average execution Time: %ld\n\n", avg_execution);
+    printf("Average Waiting Time: %ld\n", avg_waiting);
+    printf("-------------------------------\n");
+}
+
+
+Submit queue[200];
+struct itimerspec timer_spec; 
+timer_t timerid;
+
+int queue_empty(){
+    return front == rear;
+
+}
+
+void print_queue(){
+    printf("front: %d , rear: %d\n" ,front , rear );
+    for (int i = front; i < rear; i++)
+    {
+        printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
+    }
+    
+}
+
+int find_submit(int pid){
+    for (int i = 0; i < count_history; i++)
+    {
+        if (pid == pid_history[i])
+        {
+            return i;
+        }
+        
+    }
+    
+}
+
+void add_waittime( ){
+    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
+    for (int i = front ; i < rear; i++)
+    {
+        queue[i].wait_time += TSLICE;
     }
 }
 
-void signal_handler(int signum) {
+void stop_processes(){
+
+    int status , i = 0;
+    while (i < cpu_counter) { 
+        int pid = queue[old_head].pid;
+        kill(pid, SIGSTOP);
+        //printf("stopping process with pid :%d\n" , pid );
+        usleep(500 * 1000);
+        waitpid(pid, &status, WNOHANG);
+
+        if (!WIFEXITED(status)) {
+            queue[rear++] = queue[old_head];
+        }
+        else{
+            queue[old_head].end_time = get_time();
+            Submit submit = queue[old_head];
+            add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
+        }
+        old_head++;
+        i++;    
+    }
+
+}
+
+void signal_handler(int signum) { 
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
         exit(0);
     }
+
+    else if (signum == SIGALRM) {
+        //printf("received sigalrm\n");
+        stop_processes();
+        return;
+    }
+}
+
+void set_round_robin_timer() {
+    struct itimerval val;
+    struct sigaction action;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = SA_RESTART;
+    action.sa_handler = signal_handler;
+
+    if (sigaction(SIGALRM, &action, NULL) == -1) {
+        perror("sigaction");
+        exit(1);
+    }
+    val.it_value.tv_sec = TSLICE / 1000;
+    val.it_value.tv_usec = (TSLICE % 1000) * 1000;
+    val.it_interval.tv_sec = 0;
+    val.it_interval.tv_usec = 0;
+
+    if (setitimer(ITIMER_REAL, &val, NULL) == -1) {
+        perror("setitimer");
+        exit(1);
+    }
+}
+
+void round_robin(){
+    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
+
+    //sort_queue();
+    cpu_counter = 0;
+    old_head = front;
+    int pid ;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        kill(queue[front].pid, SIGCONT);
+        if ( !queue[front].start_flag )
+        {
+            queue[front].start_flag = 1;
+            queue[front].start_time = get_time();
+        }
+        cpu_counter++;
+        front++;
+    }
+
+    add_waittime();
+    printf("timer running\n");
+    set_round_robin_timer();
+    usleep(500 * 1000);
+    
+}
+
+void stableSelectionSort(Submit arr[], int n) {
+    int i, j, minIndex;
+    Submit temp;
+
+    for (i = 0; i < n - 1; i++) {
+        minIndex = i;
+        for (j = i + 1; j < n; j++) {
+            if (arr[j].priority < arr[minIndex].priority || (arr[j].priority == arr[minIndex].priority && j < minIndex)) {
+                minIndex = j;
+            }
+        }
+
+        // Swap arr[i] and arr[minIndex]
+        temp = arr[minIndex];
+        for (j = minIndex; j > i; j--) {
+            arr[j] = arr[j - 1];
+        }
+        arr[i] = temp;
+    }
+}
+
+void sigusr_handler( int signum ){
+    if ( signum == SIGUSR1 ) 
+    {   while (!queue_empty())
+        {
+            round_robin();
+        }
+        return;
+    }
 }
 
 void setup_signal_handler() {
-    struct sigaction sh;
-    sh.sa_handler = signal_handler;
-    if (sigaction(SIGINT, &sh, NULL) != 0) {
-        printf("Signal handling failed.\n");
+    struct sigaction sh_int, sh_usr1;
+    memset(&sh_int, 0, sizeof(sh_int));
+    sh_int.sa_handler = signal_handler;
+    sigaction(SIGINT, &sh_int, NULL); // Register handler for SIGINT
+
+    memset(&sh_usr1, 0, sizeof(sh_usr1));
+    sh_usr1.sa_handler = sigusr_handler;
+    sigaction(SIGUSR1, &sh_usr1, NULL); // Register handler for SIGQUIT
+   
+    struct sigaction sh_alarm;   
+    sh_alarm.sa_handler = signal_handler;
+    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
         exit(1);
-    }
-    sigaction(SIGINT, &sh, NULL);
-}
-
-bool newline_checker(char *line, int len) {
-    bool flag1 = false, flag2 = false;
-    if (line[len - 1] == '\n') {
-        flag1 = true;
-    }
-    if (line[len - 1] == '\r') {
-        flag2 = true;
-    }
-    return flag1 || flag2;
-}
-
-void executeCommand(char **argv, int queue[], int priority) {
-    int pid = fork();
-    child_pid = pid;
-
-    if (pid < 0) {
-        printf("Forking child failed.\n");
-        exit(1);
-    } else if (pid == 0) { // Child process
-        signal(SIGCONT, SIG_DFL);
-        execvp(argv[0], argv);
-        printf("Command failed.\n");
-        exit(1);
-    } else {
-        queue[queue_head++] = pid;
-        int ret;
-        int pid = wait(&ret);
-
-        if (WIFEXITED(ret)) {
-            if (WEXITSTATUS(ret) == -1) {
-                printf("Exit = -1\n");
-            }
-        } else {
-            printf("\nAbnormal termination with pid :%d\n", pid);
-        }
-
-        return;
     }
 }
 
-void schedule(int signum, int queue[], int priorities[], int queue_size) {
-    // Sort the jobs in the queue based on priority (higher priority first)
-    for (int i = 0; i < queue_size - 1; i++) {
-        for (int j = i + 1; j < queue_size; j++) {
-            if (priorities[i] < priorities[j]) {
-                int temp_pid = queue[i];
-                int temp_priority = priorities[i];
-                queue[i] = queue[j];
-                priorities[i] = priorities[j];
-                queue[j] = temp_pid;
-                priorities[j] = temp_priority;
+void sort_Submits(Submit Submits[], int count) {
+    for (int i = 0; i < count; i++) {
+        for (int j = 0; j < count - i - 1; j++) {
+            if (Submits[j].priority > Submits[j + 1].priority) {
+                // Swap Submits[j] and Submits[j+1]
+                Submit temp = Submits[j];
+                Submits[j] = Submits[j + 1];
+                Submits[j + 1] = temp;
             }
         }
     }
-
-    // Signal the first NCPU processes in the ready queue to start execution
-    for (int i = 0; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGCONT);
-    }
-
-    // Pause the running processes after TSLICE milliseconds
-    usleep(TSLICE * 1000);
-
-    // Check for completed processes and remove them from the queue
-    int i = queue_head;
-    while (i < queue_size) {
-        int pid = queue[i];
-        int status;
-        int result = waitpid(pid, &status, WNOHANG);
-        if (result == -1) {
-            // Error handling
-        } else if (result == 0) {
-            // The process is still running
-            i++;
-        } else {
-            // The process has terminated, remove it from the queue
-            queue_head++;
-        }
-    }
-
-    // Requeue the paused processes to the rear of the ready queue
-    for (int i = queue_tail; i < NCPU && i < queue_size; i++) {
-        int pid = queue[i];
-        kill(pid, SIGSTOP);
-        queue[queue_head++] = pid;
-    }
 }
 
-
-void executeCommand(char** argv) {  
-    int pid = fork();
-    child_pid = pid;
-
-    if (pid < 0) {
-        printf("Forking child failed.\n");
-        exit(1);
-    }
-
-    else if (pid == 0) { //child process
-
-        execvp(argv[0], argv); 
-        printf("Command failed.\n");
-        exit(1);
-    }
-
-    else { 
-        
-        int ret;
-        int pid = wait(&ret);
-
-        if (WIFEXITED(ret)) {
-            if (WEXITSTATUS(ret) == -1)
-            {
-                printf("Exit = -1\n");
-            }
-        } else {
-            printf("\nAbnormal termination with pid :%d\n" , pid);
-        }
-        
-        return;
-    }
-}
-
-int queue_empty (){
-    return queue_head == queue_tail;
-}
-
-void schedule() {
-    int cpu_counter = 0;// tells how many processes have been continued
-    int old_head = queue_head;
-    printf("Starting commands\n");
-    pid_t pid;
-    //current time 
-
-
-    while (cpu_counter != NCPU && !queue_empty()) {// to take in NCPU processes or till the queue is empty
-        pid = queue[queue_head++];
-        kill(pid, SIGCONT); // continue the process
-        cpu_counter++;
-    }
-
-    printf("Running commands\n");
-
-    // timer code will be here , for now assume there is some timer which runs the code for a specific TSLICE
-    int status;// to check exit status of the porcesses
-    int i = 0;
-
-    while (i < cpu_counter) { // stops the processes and adds to queue only if they are not finished
-        pid = queue[old_head++];
-        kill(pid, SIGSTOP);
-        waitpid(pid, &status, WNOHANG);//WNOHANG will check if the program has finished executing
-                                       // if it has finished then WIFEXITED will be true.
-                                       //if not finished then waitpid won't wait for process to finish(non-blocking)and
-                                       //WIFEXITED will be false
-
-        if (!WIFEXITED(status)) {
-            queue[queue_tail++] = pid;
-        }
-        i++;
-    }
-}
-
-char **break_spaces(char *str) {
+char** break_spaces(char *str) {  
     char **command;
     char *sep = " \n";
-    command = (char **)malloc(sizeof(char *) * 100);
+    command = (char**)malloc(sizeof(char*) * 100);
     int len = 0;
     if (command == NULL) {
         printf("Memory allocation failed\n");
-        exit(1);
+        exit(1); 
     }
 
     int i = 0;
-    char *token = strtok(str, sep);
+    char *token = strtok(str,sep ); 
     while (token != NULL) {
         len = strlen(token);
-        command[i] = (char *)malloc(len + 1);
+        command[i] = (char*)malloc( len + 1);
         if (command[i] == NULL) {
             printf("Memory allocation failed\n");
-            exit(1);
+            exit(1); 
         }
 
         strcpy(command[i], token);
@@ -274,62 +288,94 @@ char **break_spaces(char *str) {
     return command;
 }
 
-char *Input() {
-    char *input_str = (char *)malloc(100);
+void queue_command( char* message){
+    char **command = break_spaces(message);
+    int i = 0 , j = 0;
+    while (command[i] != NULL)
+    {
+        i++;
+    }
+
+    Submit submit;
+    submit.command = (char**)malloc(sizeof(char*));
+    submit.command[0] = (char*)malloc(sizeof(char)*100);
+    submit.command[0] = command[1];
+    if (i == 3)
+    {
+        submit.priority = atoi(command[2]);
+    }
+    else{
+        submit.priority = 1;
+    }
+    submit.start_time = 0;
+    submit.end_time = 0;
+    submit.wait_time = 0;
+    submit.start_flag = 0;
+    queue[rear] = submit;
+
+    int pid = fork();
+    if (pid < 0) {
+        printf("Forking child failed.\n");
+        exit(1);
+    } 
+    else if (pid == 0) {
+        execvp( submit.command[0] , submit.command );
+        printf("Command failed.\n");
+        exit(1);
+
+    } else {
+        kill(pid, SIGSTOP);
+        queue[rear].pid = pid;
+        //add_to_history( queue[rear].command[0] , queue[rear].pid , get_time(), 0);        
+        rear++;
+    }   
+    
+}
+
+void read_pipe(){
+    const char* fifoName = "/tmp/simplescheduler_fifo";
+    int fifo_fd = open(fifoName, O_RDONLY);
+
+    char command[256];
+    ssize_t bytes_read;
+
+    bytes_read = read(fifo_fd, command, sizeof(command));
+    close(fifo_fd);
+
+    if (bytes_read > 0) {
+        queue_command( command );
+        //print_queue();
+    }
+}
+
+char* Input(){   // to take input from user , returns the string entered
+    char *input_str = (char*)malloc(100);
     if (input_str == NULL) {
         printf("Memory allocation failed\n");
-        exit(1);
+        exit(1); 
     }
     flag_for_Input = false;
-    fgets(input_str, 100, stdin);
-
-    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ') {
+    fgets(input_str ,100, stdin);
+    
+    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
+    {   
+        
         flag_for_Input = true;
     }
     return input_str;
 }
 
-int main(int argc, char const *argv[]) {
-    if (argc != 3) {
-        printf("All arguments not entered\n");
-        exit(1);
-    }
-
+int main(int argc, char const *argv[])
+{
+    printf("Round Robin started\n");
+    setup_signal_handler();
     NCPU = atoi(argv[1]);
     TSLICE = atoi(argv[2]);
-    int queue[NCPU];
-    int priorities[NCPU]; // Priority for each job in the queue
-    setup_signal_handler();
-    char *str, *str_for_history = (char *)malloc(100);
-    if (str_for_history == NULL) {
-        printf("Error allocating memory\n");
-        exit(1);
+
+    while (true)
+    {
+        read_pipe();
+
     }
-
-    char c[100];
-    printf("\n\nSHELL STARTED\n\n----------------------------\n\n");
-
-    while (1) {
-        getcwd(c, sizeof(c));
-        printf("Shell> %s>>> ", c);
-        str = Input(); // Get user input
-        if (flag_for_Input == true) {
-            char **command_1 = break_spaces(str);
-            int priority = MIN_PRIORITY; // Default priority
-            if (command_1[2]) {
-                // The user specified a priority as a command-line argument
-                priority = atoi(command_1[2]);
-            }
-
-            strcpy(str_for_history, str);
-            start_time = get_time();
-            executeCommand(command_1, queue, priority);
-            count_history = add_to_history(str_for_history, child_pid, priority, start_time, get_time(), count_history);
-        }
-    }
-
-    free(str_for_history);
-
     return 0;
 }
-
