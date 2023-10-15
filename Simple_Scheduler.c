@@ -105,9 +105,9 @@ int find_submit(int pid){
 }
 
 void add_waittime( ){
-    for (int i = cpu_counter + front ; i < rear; i++)
+    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
+    for (int i = front ; i < rear; i++)
     {
-        
         queue[i].wait_time += TSLICE;
     }
 }
@@ -119,7 +119,7 @@ void stop_processes(){
         int pid = queue[old_head].pid;
         kill(pid, SIGSTOP);
         //printf("stopping process with pid :%d\n" , pid );
-
+        usleep(500 * 1000);
         waitpid(pid, &status, WNOHANG);
 
         if (!WIFEXITED(status)) {
@@ -129,7 +129,6 @@ void stop_processes(){
             queue[old_head].end_time = get_time();
             Submit submit = queue[old_head];
             add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
-            sleep(1);
         }
         old_head++;
         i++;    
@@ -174,6 +173,8 @@ void set_round_robin_timer() {
 }
 
 void round_robin(){
+    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
+
     //sort_queue();
     cpu_counter = 0;
     old_head = front;
@@ -181,8 +182,6 @@ void round_robin(){
 
     while (cpu_counter != NCPU && !queue_empty()) {
         kill(queue[front].pid, SIGCONT);
-        //printf("continuing process with pid :%d\n" ,queue[front].pid );
-
         if ( !queue[front].start_flag )
         {
             queue[front].start_flag = 1;
@@ -193,10 +192,9 @@ void round_robin(){
     }
 
     add_waittime();
-    sleep(1);
     printf("timer running\n");
     set_round_robin_timer();
-    sleep(1);
+    usleep(500 * 1000);
     
 }
 
