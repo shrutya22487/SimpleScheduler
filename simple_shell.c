@@ -22,13 +22,10 @@ long get_time(){
     return epoch_time + time.tv_usec / 1000;
 }
 
-bool and_flag = false;
-char history[100][100];
-int pid_history[100],  child_pid;
+bool and_flag = false , flag_for_Input = true , submit_flag = false;
+char history[100][100] , message_str[256];
 long time_history[100][2],start_time;
-bool flag_for_Input = true;
-int count_history = 0 , ncpu , tslice , fd , scheduler_pid  , pipe_fd;
-char message_str[256];
+int count_history = 0 , ncpu , tslice , fd , scheduler_pid  , pipe_fd , pid_history[100],  child_pid , fd;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -345,28 +342,24 @@ void run_scheduler(){
 
 void send_message( char *command){
 
-    char* pipe_name = "/fifo";
-    if (mkfifo(pipe_name, 0666) == -1) {// to make the pipe readable and writable by all
-        printf("Couldn't make pipe\n");
+    char* pipename = "/tmp/_____simple_scheduler_fifo_";
+    if (mkfifo(pipename, 0666) == -1) {
+        printf("fifo not done properly\n");
         exit(1);
     }
-    pipe_fd = open(pipe_name, O_WRONLY);
-
-    if (pipe_fd == -1) {
-        printf("couldn't open pipe\n");
+    fd = open(pipename, O_WRONLY);
+    if (fd == -1) {
+        printf("couldn't open fd\n");
         exit(1);
     }
     int len = strlen(command);
 
-    write(pipe_fd, command, len + 1);
-
-    close(pipe_fd);
-
-    unlink(pipe_name);
+    write(fd, command, len + 1);
+    close(fd);
+    unlink(pipename);
 }
 
 int main(int argc, char const *argv[]) {
-    
     if ( argc != 3 )
     {
         printf("NCPU and TSLICE not entered!\n");
@@ -414,6 +407,7 @@ int main(int argc, char const *argv[]) {
                     char **command_1 = break_spaces(str);
                     if ( !strcmp("submit" , command_1[0]) )
                     {   
+                        submit_flag = true;
                         send_message(message_str); 
                     }
                     else
@@ -423,11 +417,14 @@ int main(int argc, char const *argv[]) {
                     
                 }
             }
-
-            count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
+            if (!submit_flag)
+            {
+                count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
+            }
         }
+        submit_flag = false;
     }
-
+    
     free(str_for_history);
 
     return 0;

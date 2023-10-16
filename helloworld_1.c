@@ -9,10 +9,9 @@
 #include <sys/time.h>
 #include <time.h>
 #include <errno.h>
-#include "Simple_Scheduler.h"
 int main() {
   
-  for (int i = 0; i < 1000; i++) {
+  for (int i = 0; i < 100000; i++) {
     //do something
     usleep(200);
   }

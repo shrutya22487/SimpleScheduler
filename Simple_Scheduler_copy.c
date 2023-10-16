@@ -12,13 +12,10 @@
 #include <sys/stat.h>
 #include <errno.h>
 
-int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head;
-char history[100][100];
-int pid_history[100],  child_pid;
+int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head , count_history = 0 , pid_history[100],  child_pid;
+char history[100][100] , message_str[256];
 long time_history[100][2],start_time , wait_history[100];
 bool flag_for_Input = true;
-int count_history = 0;
-char message_str[256];
 
 typedef struct {
     int pid , priority;
@@ -26,6 +23,47 @@ typedef struct {
     long start_time , end_time , wait_time;
     int start_flag;
 } Submit;
+Submit queue[200];
+timer_t timerid;
+// MISC functions:
+
+void sort_queue() {
+    int count , j;
+    Submit temp;
+    for (int i = front; i < rear; i++) {
+        count = 0;
+        j = front;
+        while (j < rear - 1)
+        {
+            if (queue[j].priority > queue[j + 1].priority) {
+                queue[j] = temp;
+                queue[j] = queue [ j + 1];
+                queue[j + 1] = temp;
+                count++;;
+            }
+            j++;
+        }
+        if (count <= 0) {
+            break;
+        }
+    }
+}
+
+void print_queue(){
+    printf("front: %d , rear: %d\n" ,front , rear );
+    for (int i = front; i < rear; i++)
+    {
+        printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
+    }
+    
+}
+
+int queue_empty(){
+    return front == rear;
+
+}
+
+//History functions:
 
 long get_time(){
     struct timeval time, *address_time = &time;
@@ -73,191 +111,23 @@ void display_history() {
     printf("-------------------------------\n");
 }
 
+//Input functions:
 
-Submit queue[200];
-struct itimerspec timer_spec; 
-timer_t timerid;
-
-int queue_empty(){
-    return front == rear;
-
-}
-
-void print_queue(){
-    printf("front: %d , rear: %d\n" ,front , rear );
-    for (int i = front; i < rear; i++)
-    {
-        printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
+char* Input(){   // to take input from user , returns the string entered
+    char *input_str = (char*)malloc(100);
+    if (input_str == NULL) {
+        printf("Memory allocation failed\n");
+        exit(1); 
     }
+    flag_for_Input = false;
+    fgets(input_str ,100, stdin);
     
-}
-
-int find_submit(int pid){
-    for (int i = 0; i < count_history; i++)
-    {
-        if (pid == pid_history[i])
-        {
-            return i;
-        }
+    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
+    {   
         
+        flag_for_Input = true;
     }
-    
-}
-
-void add_waittime( ){
-    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
-    for (int i = front ; i < rear; i++)
-    {
-        queue[i].wait_time += TSLICE;
-    }
-}
-
-void stop_processes(){
-
-    int status , i = 0;
-    while (i < cpu_counter) { 
-        int pid = queue[old_head].pid;
-        kill(pid, SIGSTOP);
-        //printf("stopping process with pid :%d\n" , pid );
-        usleep(500 * 1000);
-        waitpid(pid, &status, WNOHANG);
-
-        if (!WIFEXITED(status)) {
-            queue[rear++] = queue[old_head];
-        }
-        else{
-            queue[old_head].end_time = get_time();
-            Submit submit = queue[old_head];
-            add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
-        }
-        old_head++;
-        i++;    
-    }
-
-}
-
-void signal_handler(int signum) { 
-    if (signum == SIGINT) {
-        printf("\n---------------------------------\n");
-        display_history();
-        exit(0);
-    }
-
-    else if (signum == SIGALRM) {
-        //printf("received sigalrm\n");
-        stop_processes();
-        return;
-    }
-}
-
-void set_round_robin_timer() {
-    struct itimerval val;
-    struct sigaction action;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_RESTART;
-    action.sa_handler = signal_handler;
-
-    if (sigaction(SIGALRM, &action, NULL) == -1) {
-        perror("sigaction");
-        exit(1);
-    }
-    val.it_value.tv_sec = TSLICE / 1000;
-    val.it_value.tv_usec = (TSLICE % 1000) * 1000;
-    val.it_interval.tv_sec = 0;
-    val.it_interval.tv_usec = 0;
-
-    if (setitimer(ITIMER_REAL, &val, NULL) == -1) {
-        perror("setitimer");
-        exit(1);
-    }
-}
-
-void round_robin(){
-    //printf("cpu counter : %d , front : %d , rear ; %d " , cpu_counter , front , rear);
-
-    //sort_queue();
-    cpu_counter = 0;
-    old_head = front;
-    int pid ;
-
-    while (cpu_counter != NCPU && !queue_empty()) {
-        kill(queue[front].pid, SIGCONT);
-        if ( !queue[front].start_flag )
-        {
-            queue[front].start_flag = 1;
-            queue[front].start_time = get_time();
-        }
-        cpu_counter++;
-        front++;
-    }
-
-    add_waittime();
-    printf("timer running\n");
-    set_round_robin_timer();
-    usleep(500 * 1000);
-    
-}
-
-void stableSelectionSort(Submit arr[], int n) {
-    int i, j, minIndex;
-    Submit temp;
-
-    for (i = 0; i < n - 1; i++) {
-        minIndex = i;
-        for (j = i + 1; j < n; j++) {
-            if (arr[j].priority < arr[minIndex].priority || (arr[j].priority == arr[minIndex].priority && j < minIndex)) {
-                minIndex = j;
-            }
-        }
-
-        // Swap arr[i] and arr[minIndex]
-        temp = arr[minIndex];
-        for (j = minIndex; j > i; j--) {
-            arr[j] = arr[j - 1];
-        }
-        arr[i] = temp;
-    }
-}
-
-void sigusr_handler( int signum ){
-    if ( signum == SIGUSR1 ) 
-    {   while (!queue_empty())
-        {
-            round_robin();
-        }
-        return;
-    }
-}
-
-void setup_signal_handler() {
-    struct sigaction sh_int, sh_usr1;
-    memset(&sh_int, 0, sizeof(sh_int));
-    sh_int.sa_handler = signal_handler;
-    sigaction(SIGINT, &sh_int, NULL); // Register handler for SIGINT
-
-    memset(&sh_usr1, 0, sizeof(sh_usr1));
-    sh_usr1.sa_handler = sigusr_handler;
-    sigaction(SIGUSR1, &sh_usr1, NULL); // Register handler for SIGQUIT
-   
-    struct sigaction sh_alarm;   
-    sh_alarm.sa_handler = signal_handler;
-    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
-        printf("Signal handling for SIGALRM failed.\n");
-        exit(1);
-    }
-}
-
-void sort_Submits(Submit Submits[], int count) {
-    for (int i = 0; i < count; i++) {
-        for (int j = 0; j < count - i - 1; j++) {
-            if (Submits[j].priority > Submits[j + 1].priority) {
-                // Swap Submits[j] and Submits[j+1]
-                Submit temp = Submits[j];
-                Submits[j] = Submits[j + 1];
-                Submits[j + 1] = temp;
-            }
-        }
-    }
+    return input_str;
 }
 
 char** break_spaces(char *str) {  
@@ -286,6 +156,138 @@ char** break_spaces(char *str) {
     }
     command[i] = NULL;
     return command;
+}
+
+//Signal Handling:
+
+void stop_processes(){
+    int status , i = 0;
+    printf("cpu_counter is : %d\n" , cpu_counter);
+    while (i < cpu_counter) { 
+        int pid = queue[old_head].pid;
+        printf("Sending SIGSTOP to pid :%d\n" , pid);
+        if (pid != 0)
+        {
+            kill(pid, SIGSTOP);
+        }
+        
+
+        waitpid(pid, &status, WNOHANG);
+
+        if (!WIFEXITED(status)) {
+            queue[rear++] = queue[old_head];
+        }
+        else{
+            queue[old_head].end_time = get_time();
+            Submit submit = queue[old_head];
+            add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
+        }
+        old_head++;
+        i++;    
+    }
+
+}
+
+void sigint_handler(int signum) { 
+    if (signum == SIGINT) {
+        printf("\n---------------------------------\n");
+        display_history();
+        exit(0);
+    }
+}
+
+// round robin functions:
+
+void add_waittime( ){
+    for (int i = front ; i < rear; i++)
+    {
+        queue[i].wait_time += TSLICE;
+    }
+}
+
+void set_round_robin_timer() {
+    // struct itimerval val;
+    // struct sigaction action;
+    // struct itimerspec timer_spec; 
+    // timer_t timerid;
+    // sigemptyset(&action.sa_mask);
+    // action.sa_flags = SA_RESTART;
+    // action.sa_handler = signal_handler;
+
+    // if (sigaction(SIGALRM, &action, NULL) == -1) {
+    //     perror("sigaction");
+    //     exit(1);
+    // }
+    // const long long SEC_TO_NSEC = 1000000000LL;
+    // const long long frequency_nsec = TSLICE * 1e6;
+    // timer_spec.it_value.tv_sec = frequency_nsec / SEC_TO_NSEC;
+    // timer_spec.it_value.tv_nsec = frequency_nsec % SEC_TO_NSEC;
+    // timer_spec.it_interval.tv_sec = frequency_nsec / SEC_TO_NSEC;
+    // timer_spec.it_interval.tv_nsec = frequency_nsec % SEC_TO_NSEC;
+
+    // if (setitimer(ITIMER_REAL, &val, NULL) == -1) {
+    //     perror("setitimer");
+    //     exit(1);
+    // }
+
+    struct itimerspec timer_spec; 
+    timer_t timerid;
+
+    sigset_t mask;
+    //struct sigaction action;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGALRM);
+    //action.sa_flags = SA_RESTART;
+    //action.sa_handler = signal_handler;
+    //sigaction(SIGALRM, &action, NULL);
+    
+    struct sigevent sev;
+    sev.sigev_notify = SIGEV_SIGNAL;
+    sev.sigev_signo = SIGALRM;
+    sev.sigev_value.sival_ptr = &timerid;
+
+    if (timer_create(CLOCK_REALTIME, &sev, &timerid) == -1) {
+        printf("Not able to create timer\n");
+        exit(1);
+    }
+
+    const long long SEC_TO_NSEC = 1000000000LL;
+    const long long frequency_nsec = TSLICE * 1e6;
+    timer_spec.it_value.tv_sec = frequency_nsec / SEC_TO_NSEC;
+    timer_spec.it_value.tv_nsec = frequency_nsec % SEC_TO_NSEC;
+    timer_spec.it_interval.tv_sec = 0;
+    timer_spec.it_interval.tv_nsec = 0;
+
+    
+    if (timer_settime(timerid, 0, &timer_spec, NULL) == -1) {
+        printf("Not able to set time\n");
+        exit(1);
+    }
+    
+}
+
+void round_robin(){
+    sort_queue();
+    cpu_counter = 0;
+    old_head = front;
+    int pid ;
+
+    while (cpu_counter != NCPU && !queue_empty()) {
+        kill(queue[front].pid, SIGCONT);
+        if ( !queue[front].start_flag )
+        {
+            queue[front].start_flag = 1;
+            queue[front].start_time = get_time();
+        }
+        cpu_counter++;
+        front++;
+    }
+
+    add_waittime();
+    printf("timer running\n");
+    set_round_robin_timer();
+    //sleep(1);
+    
 }
 
 void queue_command( char* message){
@@ -333,41 +335,64 @@ void queue_command( char* message){
 }
 
 void read_pipe(){
-    const char* fifoName = "/tmp/simplescheduler_fifo";
-    int fifo_fd = open(fifoName, O_RDONLY);
-
+    const char* pipename = "/tmp/_____simple_scheduler_fifo_";
+    fd = open(pipename, O_RDONLY);
+    // if (fd == -1) {
+    //     printf("couldn't open fd\n");
+    //     exit(1);
+    // }
     char command[256];
-    ssize_t bytes_read;
 
-    bytes_read = read(fifo_fd, command, sizeof(command));
-    close(fifo_fd);
-
-    if (bytes_read > 0) {
+    if (read(fd, command, sizeof(command)) > 0) {
         queue_command( command );
-        //print_queue();
+    }
+    close(fd);
+}
+
+void sigusr_handler( int signum ){
+    if ( signum == SIGUSR1 ) 
+    {   while (!queue_empty())
+        {
+            round_robin();
+        }
+        return;
     }
 }
 
-char* Input(){   // to take input from user , returns the string entered
-    char *input_str = (char*)malloc(100);
-    if (input_str == NULL) {
-        printf("Memory allocation failed\n");
-        exit(1); 
+void sigalrm_handler(int signum){
+    if (signum == SIGALRM) {
+        printf("received sigalrm\n");
+        stop_processes();
+        return;
     }
-    flag_for_Input = false;
-    fgets(input_str ,100, stdin);
+}
+
+void setup_signal_handler() {
+    struct sigaction sh_int, sh_usr1 , sh_stp;
+    memset(&sh_int, 0, sizeof(sh_int));
+    sh_int.sa_handler = sigint_handler; 
+    if (sigaction(SIGINT, &sh_int, NULL) == -1)
+    {
+        printf("Error in handling SIGINT\n");
+    }
+    memset(&sh_usr1, 0, sizeof(sh_usr1));
+    sh_usr1.sa_handler = sigusr_handler;
+    if (sigaction(SIGUSR1, &sh_usr1, NULL) == -1)
+    {
+        printf("Error in handling SIGUSR1\n");
+    }
     
-    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
-    {   
-        
-        flag_for_Input = true;
+    struct sigaction sh_alarm;   
+    sh_alarm.sa_handler = sigalrm_handler;
+    if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
+        printf("Signal handling for SIGALRM failed.\n");
+        exit(1);
     }
-    return input_str;
 }
 
 int main(int argc, char const *argv[])
 {
-    printf("Round Robin started\n");
+    //printf("Round Robin started\n");
     setup_signal_handler();
     NCPU = atoi(argv[1]);
     TSLICE = atoi(argv[2]);
