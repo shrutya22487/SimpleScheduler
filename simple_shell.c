@@ -342,7 +342,7 @@ void run_scheduler(){
 
 void send_message( char *command){
 
-    char* pipename = "/tmp/_____simple_scheduler_fifo_";
+    char* pipename = "/tmp/simple__scheduler_fifo_";
     if (mkfifo(pipename, 0666) == -1) {
         printf("fifo not done properly\n");
         exit(1);

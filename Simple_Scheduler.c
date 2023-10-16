@@ -35,11 +35,11 @@ void sort_queue() {
     Submit temp;
     for (int i = front; i < rear; i++) {
         count = 0;
-        j = front;
+        j = i;
         while (j < rear - 1)
         {
             if (queue[j].priority > queue[j + 1].priority) {
-                queue[j] = temp;
+                temp = queue[1];
                 queue[j] = queue [ j + 1];
                 queue[j + 1] = temp;
                 count++;;
@@ -147,7 +147,7 @@ void stop_processes(){
 
 void sigalrm_handler(int signum){
     if (signum == SIGALRM) {
-        printf("received sigalrm\n");
+        //printf("received sigalrm\n");
         stop_processes();
         return;
     }
@@ -155,28 +155,31 @@ void sigalrm_handler(int signum){
 
 void set_round_robin_timer() {
     struct itimerval val;
-    struct sigaction action;
-    sigemptyset(&action.sa_mask);
-    action.sa_flags = SA_RESTART;
-    action.sa_handler = sigalrm_handler;
+    struct sigaction act;
+    //doing signal masking
+    sigemptyset(&act.sa_mask);
+    act.sa_flags = SA_RESTART;
+    act.sa_handler = sigalrm_handler;
+    //what action will be taken on expiration of timer
+    if (sigaction(SIGALRM, &act, NULL) == -1) {
+        printf("sigaction not working\n");
 
-    if (sigaction(SIGALRM, &action, NULL) == -1) {
-        perror("sigaction");
         exit(1);
     }
+    // setting up timer values
     val.it_value.tv_sec = TSLICE / 1000;
     val.it_value.tv_usec = (TSLICE % 1000) * 1000;
     val.it_interval.tv_sec = 0;
     val.it_interval.tv_usec = 0;
-
+    //creates and starts the timer
     if (setitimer(ITIMER_REAL, &val, NULL) == -1) {
-        perror("setitimer");
+        printf("Not able to set time\n");
         exit(1);
     }
 }
 
 void round_robin(){
-    sort_queue();
+    //sort_queue();
     cpu_counter = 0;
     old_head = front;
     int pid ;
@@ -196,7 +199,7 @@ void round_robin(){
 
     add_waittime();
     sleep(1);
-    printf("timer running\n");
+    //printf("timer running\n");
     set_round_robin_timer();
     sleep(1);
     
@@ -318,7 +321,7 @@ void queue_command( char* message){
 }
 
 void read_pipe(){
-    const char* pipename = "/tmp/_____simple_scheduler_fifo_";
+    const char* pipename = "/tmp/simple__scheduler_fifo_";
     fd = open(pipename, O_RDONLY);
     // if (fd == -1) {
     //     printf("couldn't open fd\n");
