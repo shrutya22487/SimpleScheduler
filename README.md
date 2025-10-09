@@ -1,7 +1,7 @@
-# SimpleScheduler: Minimalistic CPU Scheduler for Educational Purposes 🚀
+# SimpleScheduler: Minimalistic Round Robin CPU Scheduler for Educational Purposes 🚀
 
 **Overview:**
-SimpleScheduler is a lightweight CPU scheduler implemented in C, designed to illustrate fundamental concepts of process scheduling. It serves as an educational tool, allowing users to explore basic CPU scheduling functionalities in a simple shell environment.
+SimpleScheduler is a lightweight Round Robin CPU scheduler implemented in C, designed to illustrate fundamental concepts of process scheduling. It serves as an educational tool, allowing users to explore basic CPU scheduling functionalities in a simple shell environment.
 
 ## Key Features ✨
 
