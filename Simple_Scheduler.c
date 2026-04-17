@@ -39,7 +39,7 @@ void sort_queue() {
         j = i;
         while (j < rear - 1) {
             if (queue[j].priority > queue[j + 1].priority) {
-                temp = queue[1];
+                temp = queue[j];
                 queue[j] = queue[j + 1];
                 queue[j + 1] = temp;
                 count++;;
@@ -167,7 +167,7 @@ void set_round_robin_timer() {
 }
 
 void round_robin() {
-    //sort_queue();
+    sort_queue();
     cpu_counter = 0;
     old_head = front;
     int pid;
