@@ -5,42 +5,42 @@
 #include<sys/types.h>
 #include<sys/wait.h>
 #include <stdbool.h>
-#include <signal.h> 
+#include <signal.h>
 #include <sys/time.h>
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
 
-int front= 0 , rear = 0 , NCPU , TSLICE , count_Submits , fd , cpu_counter , old_head;
+int front = 0, rear = 0, NCPU, TSLICE, count_Submits, fd, cpu_counter, old_head;
 char history[100][100];
-int pid_history[100],  child_pid;
-long time_history[100][2],start_time , wait_history[100];
+int pid_history[100], child_pid;
+long time_history[100][2], start_time, wait_history[100];
 bool flag_for_Input = true;
 int count_history = 0;
 char message_str[256];
 
 typedef struct {
-    int pid , priority;
-    char** command; 
-    long start_time , end_time , wait_time;
+    int pid, priority;
+    char **command;
+    long start_time, end_time, wait_time;
     int start_flag;
 } Submit;
+
 Submit queue[200];
-struct itimerspec timer_spec; 
+struct itimerspec timer_spec;
 timer_t timerid;
 
 void sort_queue() {
-    int count , j;
+    int count, j;
     Submit temp;
     for (int i = front; i < rear; i++) {
         count = 0;
         j = i;
-        while (j < rear - 1)
-        {
+        while (j < rear - 1) {
             if (queue[j].priority > queue[j + 1].priority) {
                 temp = queue[1];
-                queue[j] = queue [ j + 1];
+                queue[j] = queue[j + 1];
                 queue[j + 1] = temp;
                 count++;;
             }
@@ -52,7 +52,7 @@ void sort_queue() {
     }
 }
 
-long get_time(){
+long get_time() {
     struct timeval time, *address_time = &time;
     if (gettimeofday(address_time, NULL) != 0) {
         printf("Error in getting the time.\n");
@@ -62,7 +62,7 @@ long get_time(){
     return epoch_time + time.tv_usec / 1000;
 }
 
-void add_to_history(char *command, int pid, long start_time_ms, long end_time_ms , long wait_time) {
+void add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, long wait_time) {
     strcpy(history[count_history], command);
     pid_history[count_history] = pid;
     time_history[count_history][0] = start_time_ms;
@@ -85,44 +85,38 @@ void display_history() {
     }
 
     //calculating averages
-    long avg_waiting = 0 , avg_execution = 0;
-    for (int i = 0; i < count_history; i++)
-    {
+    long avg_waiting = 0, avg_execution = 0;
+    for (int i = 0; i < count_history; i++) {
         avg_execution += time_history[i][1] - time_history[i][0];
-        avg_waiting += wait_history[i]; 
+        avg_waiting += wait_history[i];
     }
     avg_execution /= count_history;
-    avg_waiting /= count_history; 
+    avg_waiting /= count_history;
     printf("Average execution Time: %ld\n\n", avg_execution);
     printf("Average Waiting Time: %ld\n", avg_waiting);
     printf("-------------------------------\n");
 }
 
-int queue_empty(){
+int queue_empty() {
     return front == rear;
-
 }
 
-void print_queue(){
-    printf("front: %d , rear: %d\n" ,front , rear );
-    for (int i = front; i < rear; i++)
-    {
-        printf("\npid: %d , Command_string : %s\n" , queue[i].pid , queue[i].command[0] );
+void print_queue() {
+    printf("front: %d , rear: %d\n", front, rear);
+    for (int i = front; i < rear; i++) {
+        printf("\npid: %d , Command_string : %s\n", queue[i].pid, queue[i].command[0]);
     }
-    
 }
 
-void add_waittime( ){
-    for (int i = front ; i < rear; i++)
-    {
+void add_waittime() {
+    for (int i = front; i < rear; i++) {
         queue[i].wait_time += TSLICE;
     }
 }
 
-void stop_processes(){
-
-    int status , i = 0;
-    while (i < cpu_counter) { 
+void stop_processes() {
+    int status, i = 0;
+    while (i < cpu_counter) {
         int pid = queue[old_head].pid;
         kill(pid, SIGSTOP);
         //printf("stopping process with pid :%d\n" , pid );
@@ -132,25 +126,19 @@ void stop_processes(){
         if (!WIFEXITED(status)) {
             queue[rear] = queue[old_head];
             rear++;
-        }
-        else{
+        } else {
             queue[old_head].end_time = get_time();
             Submit submit = queue[old_head];
-            add_to_history(submit.command[0] , submit.pid , submit.start_time , submit.end_time , submit.wait_time);
+            add_to_history(submit.command[0], submit.pid, submit.start_time, submit.end_time, submit.wait_time);
             sleep(1);
         }
         old_head++;
-        i++;    
+        i++;
     }
-
 }
 
-void sigalrm_handler(int signum){
-    if (signum == SIGALRM) {
-        //printf("received sigalrm\n");
-        stop_processes();
-        return;
-    }
+void sigalrm_handler(int signum) {
+    if (signum == SIGALRM) stop_processes();
 }
 
 void set_round_robin_timer() {
@@ -178,18 +166,17 @@ void set_round_robin_timer() {
     }
 }
 
-void round_robin(){
+void round_robin() {
     //sort_queue();
     cpu_counter = 0;
     old_head = front;
-    int pid ;
+    int pid;
 
     while (cpu_counter != NCPU && !queue_empty()) {
         kill(queue[front].pid, SIGCONT);
         //printf("continuing process with pid :%d\n" ,queue[front].pid );
 
-        if ( !queue[front].start_flag )
-        {
+        if (!queue[front].start_flag) {
             queue[front].start_flag = 1;
             queue[front].start_time = get_time();
         }
@@ -202,22 +189,14 @@ void round_robin(){
     //printf("timer running\n");
     set_round_robin_timer();
     sleep(1);
-    
 }
 
 
-void sigusr_handler( int signum ){
-    if ( signum == SIGUSR1 ) 
-    {   while (!queue_empty())
-        {
-            round_robin();
-        }
-        return;
-    }
+void sigusr_handler(int signum) {
+    if (signum == SIGUSR1) while (!queue_empty()) round_robin();
 }
 
-
-void sigint_handler(int signum) { 
+void sigint_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
@@ -226,21 +205,19 @@ void sigint_handler(int signum) {
 }
 
 void setup_signal_handler() {
-    struct sigaction sh_int, sh_usr1 , sh_stp;
+    struct sigaction sh_int, sh_usr1;
     memset(&sh_int, 0, sizeof(sh_int));
-    sh_int.sa_handler = sigint_handler; 
-    if (sigaction(SIGINT, &sh_int, NULL) == -1)
-    {
+    sh_int.sa_handler = sigint_handler;
+    if (sigaction(SIGINT, &sh_int, NULL) == -1) {
         printf("Error in handling SIGINT\n");
     }
     memset(&sh_usr1, 0, sizeof(sh_usr1));
     sh_usr1.sa_handler = sigusr_handler;
-    if (sigaction(SIGUSR1, &sh_usr1, NULL) == -1)
-    {
+    if (sigaction(SIGUSR1, &sh_usr1, NULL) == -1) {
         printf("Error in handling SIGUSR1\n");
     }
-    
-    struct sigaction sh_alarm;   
+
+    struct sigaction sh_alarm;
     sh_alarm.sa_handler = sigalrm_handler;
     if (sigaction(SIGALRM, &sh_alarm, NULL) != 0) {
         printf("Signal handling for SIGALRM failed.\n");
@@ -248,24 +225,24 @@ void setup_signal_handler() {
     }
 }
 
-char** break_spaces(char *str) {  
+char **break_spaces(char *str) {
     char **command;
     char *sep = " \n";
-    command = (char**)malloc(sizeof(char*) * 100);
+    command = (char **) malloc(sizeof(char *) * 100);
     int len = 0;
     if (command == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
 
     int i = 0;
-    char *token = strtok(str,sep ); 
+    char *token = strtok(str, sep);
     while (token != NULL) {
         len = strlen(token);
-        command[i] = (char*)malloc( len + 1);
+        command[i] = (char *) malloc(len + 1);
         if (command[i] == NULL) {
             printf("Memory allocation failed\n");
-            exit(1); 
+            exit(1);
         }
 
         strcpy(command[i], token);
@@ -276,23 +253,20 @@ char** break_spaces(char *str) {
     return command;
 }
 
-void queue_command( char* message){
+void queue_command(char *message) {
     char **command = break_spaces(message);
-    int i = 0 , j = 0;
-    while (command[i] != NULL)
-    {
+    int i = 0, j = 0;
+    while (command[i] != NULL) {
         i++;
     }
 
     Submit submit;
-    submit.command = (char**)malloc(sizeof(char*));
-    submit.command[0] = (char*)malloc(sizeof(char)*100);
+    submit.command = (char **) malloc(sizeof(char *));
+    submit.command[0] = (char *) malloc(sizeof(char) * 100);
     submit.command[0] = command[1];
-    if (i == 3)
-    {
+    if (i == 3) {
         submit.priority = atoi(command[2]);
-    }
-    else{
+    } else {
         submit.priority = 1;
     }
     submit.start_time = 0;
@@ -305,64 +279,57 @@ void queue_command( char* message){
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
-    } 
-    else if (pid == 0) {
-        execvp( submit.command[0] , submit.command );
+    } else if (pid == 0) {
+        execvp(submit.command[0], submit.command);
         printf("Command failed.\n");
         exit(1);
-
     } else {
         kill(pid, SIGSTOP);
         queue[rear].pid = pid;
-        //add_to_history( queue[rear].command[0] , queue[rear].pid , get_time(), 0);        
+        //add_to_history( queue[rear].command[0] , queue[rear].pid , get_time(), 0);
         rear++;
-    }   
-    
+    }
 }
 
-void read_pipe(){
-    const char* pipename = "/tmp/simple__scheduler_fifo_";
+void read_pipe() {
+    const char *pipename = "/tmp/simple__scheduler_fifo_";
     fd = open(pipename, O_RDONLY);
-    // if (fd == -1) {
-    //     printf("couldn't open fd\n");
-    //     exit(1);
-    // }
+    if (fd == -1) {
+        printf("couldn't open fd\n");
+        exit(1);
+    }
     char command[256];
 
     if (read(fd, command, sizeof(command)) > 0) {
-        queue_command( command );
+        queue_command(command);
     }
     close(fd);
 }
 
-char* Input(){   // to take input from user , returns the string entered
-    char *input_str = (char*)malloc(100);
+char *Input() {
+    // to take input from user , returns the string entered
+    char *input_str = (char *) malloc(100);
     if (input_str == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
     flag_for_Input = false;
-    fgets(input_str ,100, stdin);
-    
-    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
-    {   
-        
+    fgets(input_str, 100, stdin);
+
+    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ') {
         flag_for_Input = true;
     }
     return input_str;
 }
 
-int main(int argc, char const *argv[])
-{
+int main(int argc, char const *argv[]) {
     //printf("Round Robin started\n");
     setup_signal_handler();
     NCPU = atoi(argv[1]);
     TSLICE = atoi(argv[2]);
 
-    while (true)
-    {
+    while (true) {
         read_pipe();
-
     }
     return 0;
 }

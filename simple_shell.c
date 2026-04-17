@@ -5,14 +5,19 @@
 #include<sys/types.h>
 #include<sys/wait.h>
 #include <stdbool.h>
-#include <signal.h> 
+#include <signal.h>
 #include <sys/time.h>
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <errno.h>
 
-long get_time(){
+bool and_flag = false, flag_for_Input = true, submit_flag = false;
+char history[100][100], message_str[256];
+long time_history[100][2], start_time;
+int count_history = 0, ncpu, tslice, fd, scheduler_pid, pipe_fd, pid_history[100], child_pid, fd;
+
+long get_time() {
     struct timeval time, *address_time = &time;
     if (gettimeofday(address_time, NULL) != 0) {
         printf("Error in getting the time.\n");
@@ -21,11 +26,6 @@ long get_time(){
     long epoch_time = time.tv_sec * 1000;
     return epoch_time + time.tv_usec / 1000;
 }
-
-bool and_flag = false , flag_for_Input = true , submit_flag = false;
-char history[100][100] , message_str[256];
-long time_history[100][2],start_time;
-int count_history = 0 , ncpu , tslice , fd , scheduler_pid  , pipe_fd , pid_history[100],  child_pid , fd;
 
 int add_to_history(char *command, int pid, long start_time_ms, long end_time_ms, int count_history) {
     strcpy(history[count_history], command);
@@ -49,15 +49,14 @@ void display_history() {
     }
 }
 
-void signal_handler(int signum) { 
+void signal_handler(int signum) {
     if (signum == SIGINT) {
         printf("\n---------------------------------\n");
         display_history();
         sleep(1);
-        kill( scheduler_pid , SIGINT );
+        kill(scheduler_pid, SIGINT);
         exit(0);
     }
-    
 }
 
 void setup_signal_handler() {
@@ -69,60 +68,52 @@ void setup_signal_handler() {
     }
 }
 
-bool newline_checker( char* line  , int len){
-    bool flag1  = false , flag2 = false;
-    if ( line[len - 1] == '\n' )
-    {
+bool newline_checker(char *line, int len) {
+    bool flag1 = false, flag2 = false;
+    if (line[len - 1] == '\n') {
         flag1 = true;
     }
-    if (line[len - 1] == '\r')
-    {
+    if (line[len - 1] == '\r') {
         flag2 = true;
     }
     return flag1 || flag2;
 }
 
-void executeCommand(char** argv) {  
+void executeCommand(char **argv) {
     int pid = fork();
     child_pid = pid;
 
     if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
-    }
-
-    else if (pid == 0) { //child process
+    } else if (pid == 0) {
+        //child process
 
         if (and_flag) signal(SIGHUP, SIG_IGN);
 
         execvp(argv[0], argv);
         printf("Command failed.\n");
         exit(1);
-    }
-
-    else { 
-
-        if (!and_flag)
-        {
+    } else {
+        if (!and_flag) {
             int ret;
             int pid = wait(&ret);
 
             if (WIFEXITED(ret)) {
-                if (WEXITSTATUS(ret) == -1)
-                {
+                if (WEXITSTATUS(ret) == -1) {
                     printf("Exit = -1\n");
                 }
             } else {
-                printf("\nAbnormal termination with pid :%d\n" , pid);
+                printf("\nAbnormal termination with pid :%d\n", pid);
             }
         }
-        return;
     }
 }
 
-void executePipe(char ***commands) {  // CHECK
+void executePipe(char ***commands) {
+    // CHECK
     int i = 0, pid;
-    int inputfd = STDIN_FILENO;  
+    int inputfd = STDIN_FILENO;
 
     while (commands[i] != NULL) {
         int fd[2];
@@ -134,9 +125,7 @@ void executePipe(char ***commands) {  // CHECK
         if (pid < 0) {
             printf("Forking child failed.\n");
             exit(1);
-
         } else if (pid == 0) {
-
             close(fd[0]); // close read end
             if (inputfd != STDIN_FILENO) {
                 dup2(inputfd, STDIN_FILENO);
@@ -152,28 +141,26 @@ void executePipe(char ***commands) {  // CHECK
             if (inputfd != STDIN_FILENO) {
                 close(inputfd);
             }
-            inputfd = fd[0];// for next iteration
+            inputfd = fd[0]; // for next iteration
             i++;
         }
     }
     int wait_process;
-    
-    do
-    {
+
+    do {
         wait_process = wait(NULL);
     } while (wait_process > 0);
-    
 }
 
-char** break_pipes_1(char *str) {
+char **break_pipes_1(char *str) {
     char **commands;
-    char* sep = "|";
-    int len = 0 ;
-    commands = (char**)malloc(sizeof(char*) * 100); 
-    
+    char *sep = "|";
+    int len = 0;
+    commands = (char **) malloc(sizeof(char *) * 100);
+
     if (commands == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
 
     int i = 0;
@@ -182,38 +169,38 @@ char** break_pipes_1(char *str) {
 
     while (token != NULL) {
         len = strlen(token);
-        commands[i] = (char*)malloc( len + 1);
+        commands[i] = (char *) malloc(len + 1);
         if (commands[i] == NULL) {
             printf("Memory allocation failed\n");
-            exit(1); 
+            exit(1);
         }
         strcpy(commands[i], token);
         token = strtok(NULL, sep);
         i++;
     }
 
-    commands[i] = NULL;  // Null-terminate the command array
+    commands[i] = NULL; // Null-terminate the command array
     return commands;
 }
 
-char** break_spaces(char *str) {  
+char **break_spaces(char *str) {
     char **command;
     char *sep = " \n";
-    command = (char**)malloc(sizeof(char*) * 100);
+    command = (char **) malloc(sizeof(char *) * 100);
     int len = 0;
     if (command == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
 
     int i = 0;
-    char *token = strtok(str,sep ); 
+    char *token = strtok(str, sep);
     while (token != NULL) {
         len = strlen(token);
-        command[i] = (char*)malloc( len + 1);
+        command[i] = (char *) malloc(len + 1);
         if (command[i] == NULL) {
             printf("Memory allocation failed\n");
-            exit(1); 
+            exit(1);
         }
 
         strcpy(command[i], token);
@@ -224,67 +211,62 @@ char** break_spaces(char *str) {
     return command;
 }
 
-char*** break_pipes_2( char **str){ // breaks the command we got from the last function on the basis of spaces
-                                    //eg : {"cat helloworld.c" , "grep print" , "wc -l", NULL} is broken into 
-                                    //{{"cat" , "helloworld.c",NULL},{"grep" , "print",NULL}, {"wc" , "-l", NULL} , NULL}
-                                    //this is then passed to executePipe
+char ***break_pipes_2(char **str) {
+    // breaks the command we got from the last function on the basis of spaces
+    //eg : {"cat helloworld.c" , "grep print" , "wc -l", NULL} is broken into
+    //{{"cat" , "helloworld.c",NULL},{"grep" , "print",NULL}, {"wc" , "-l", NULL} , NULL}
+    //this is then passed to executePipe
     char ***command;
-    command = (char***)malloc(sizeof(char**)*100);
+    command = (char ***) malloc(sizeof(char **) * 100);
     if (command == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
 
-    int len = 0 ,i = 0;
-    while (str[len] != NULL)
-    {
+    int len = 0, i = 0;
+    while (str[len] != NULL) {
         len++;
     }
-    for (i = 0; i < len; i++)
-    {
-        command[i] = break_spaces( str[i] );
+    for (i = 0; i < len; i++) {
+        command[i] = break_spaces(str[i]);
     }
     command[i] = NULL;
     return command;
-
 }
 
-bool check_for_pipes(char* str) {
-
-    for (int i = 0; str[i] != '\0'; i++) { // Loop until the end of the string
-        if (str[i] == '|') { // Use single quotes for character literals
+bool check_for_pipes(char *str) {
+    for (int i = 0; str[i] != '\0'; i++) {
+        // Loop until the end of the string
+        if (str[i] == '|') {
+            // Use single quotes for character literals
             return true;
         }
     }
     return false;
 }
 
-char* Input(){   // to take input from user , returns the string entered
-    char *input_str = (char*)malloc(100);
+char *Input() {
+    // to take input from user , returns the string entered
+    char *input_str = (char *) malloc(100);
     if (input_str == NULL) {
         printf("Memory allocation failed\n");
-        exit(1); 
+        exit(1);
     }
     flag_for_Input = false;
-    fgets(input_str ,100, stdin);
-    
-    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ')
-    {   
-        
+    fgets(input_str, 100, stdin);
+
+    if (strlen(input_str) != 0 && input_str[0] != '\n' && input_str[0] != ' ') {
         flag_for_Input = true;
     }
     return input_str;
 }
 
-bool check_and(char* str){
-
-    if (str[strlen(str) - 2] == '&')
-    {
+bool check_and(char *str) {
+    if (str[strlen(str) - 2] == '&') {
         str[strlen(str) - 2] = '\0';
         return true;
     }
     return false;
-    
 }
 
 void executeScript(char *filename) {
@@ -298,9 +280,9 @@ void executeScript(char *filename) {
     char line[100];
     while (fgets(line, sizeof(line), file) != NULL) {
         int len = strlen(line);
-        while (len > 0 && newline_checker(line , len)) {
+        while (len > 0 && newline_checker(line, len)) {
             line[len - 1] = '\0';
-            len -= 1 ;
+            len -= 1;
         }
         if (len == 0) {
             continue;
@@ -318,21 +300,21 @@ void executeScript(char *filename) {
     fclose(file);
 }
 
-void run_scheduler(){   
-    char *n_str = (char*)malloc(sizeof(char)*  10);
-    char *t_str = (char*)malloc(sizeof(char)*  10);
+void run_scheduler() {
+    char *n_str = (char *) malloc(sizeof(char) * 10);
+    char *t_str = (char *) malloc(sizeof(char) * 10);
     snprintf(n_str, 10, "%d", ncpu);
     snprintf(t_str, 10, "%d", tslice);
 
     char *p = "./Simple_Scheduler";
-    char *args[] = {"./Simple_Scheduler" , n_str , t_str,  NULL};
-    
+    char *args[] = {"./Simple_Scheduler", n_str, t_str, NULL};
+
     int pid = fork();
-    if (pid< 0) {
+    if (pid < 0) {
         printf("Forking child failed.\n");
         exit(1);
     } else if (pid == 0) {
-        execvp( p , args );
+        execvp(p, args);
         printf("Command failed.\n");
         exit(1);
     } else {
@@ -340,9 +322,8 @@ void run_scheduler(){
     }
 }
 
-void send_message( char *command){
-
-    char* pipename = "/tmp/simple__scheduler_fifo_";
+void send_message(char *command) {
+    char *pipename = "/tmp/simple__scheduler_fifo_";
     if (mkfifo(pipename, 0666) == -1) {
         printf("fifo not done properly\n");
         exit(1);
@@ -360,16 +341,15 @@ void send_message( char *command){
 }
 
 int main(int argc, char const *argv[]) {
-    if ( argc != 3 )
-    {
+    if (argc != 3) {
         printf("NCPU and TSLICE not entered!\n");
         exit(1);
     }
     ncpu = atoi(argv[1]);
-    tslice = atoi( argv [2]);
-    setup_signal_handler(); 
-    run_scheduler();   
-    char *str, *str_for_history = (char *)malloc(100);
+    tslice = atoi(argv[2]);
+    setup_signal_handler();
+    run_scheduler();
+    char *str, *str_for_history = (char *) malloc(100);
     if (str_for_history == NULL) {
         printf("Error allocating memory\n");
         exit(1);
@@ -381,20 +361,18 @@ int main(int argc, char const *argv[]) {
         getcwd(c, sizeof(c));
         printf("Shell> %s>>> ", c);
         str = Input();
-        strcpy(message_str , str);
-        if ( !strcmp( "run\n" , str ) )
-        {
-            kill( scheduler_pid , SIGUSR1 );
+        strcpy(message_str, str);
+        if (!strcmp("run\n", str)) {
+            kill(scheduler_pid, SIGUSR1);
             continue;
-        }
-        
-        else if (flag_for_Input == true) {
+        } else if (flag_for_Input == true) {
             strcpy(str_for_history, str);
             start_time = get_time();
 
             and_flag = check_and(str);
 
-            if (str[0] == '@') { // @ means script file
+            if (str[0] == '@') {
+                // @ means script file
                 str[strlen(str) - 1] = '\0';
                 executeScript(++str); // Skip the special character
             } else {
@@ -403,28 +381,22 @@ int main(int argc, char const *argv[]) {
                     char ***command_2 = break_pipes_2(command_1);
                     executePipe(command_2);
                 } else {
-                    
                     char **command_1 = break_spaces(str);
-                    if ( !strcmp("submit" , command_1[0]) )
-                    {   
+                    if (!strcmp("submit", command_1[0])) {
                         submit_flag = true;
-                        send_message(message_str); 
-                    }
-                    else
-                    {
+                        send_message(message_str);
+                    } else {
                         executeCommand(command_1);
                     }
-                    
                 }
             }
-            if (!submit_flag)
-            {
-                count_history =  add_to_history(str_for_history, child_pid, start_time, get_time() , count_history);
+            if (!submit_flag) {
+                count_history = add_to_history(str_for_history, child_pid, start_time, get_time(), count_history);
             }
         }
         submit_flag = false;
     }
-    
+
     free(str_for_history);
 
     return 0;
